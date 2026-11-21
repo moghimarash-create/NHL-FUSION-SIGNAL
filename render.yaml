@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: nhl-fusion-signal
+    runtime: docker
+    repo: https://github.com/moghimarash-create/NHL-FUSION-SIGNAL
+    branch: main
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "8080"
+      - key: DRY_RUN
+        value: "true"
+      - key: KALSHI_ENABLED
+        value: "0"
+      - key: NHL_FUSION_INPUT_SHEET_ID
+        sync: false
+      - key: NHL_FUSION_CALC_SHEET_ID
+        sync: false
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false

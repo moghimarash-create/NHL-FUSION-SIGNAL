@@ -1,0 +1,17 @@
+node_modules
+**/node_modules
+.venv
+dist
+**/dist
+.git
+.env
+.env.*
+*.pem
+*.key
+*service-account*.json
+*service_account*.json
+artifacts/data/kalshi_nba_state.json
+artifacts/api-server/logs
+.cache
+.local
+tmp
