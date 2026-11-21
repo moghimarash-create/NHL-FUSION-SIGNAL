@@ -1481,17 +1481,16 @@ def main():
         cur_roster = live_roster_pids.get(tname, {})
         base_mpg = base_mpg_2526.get(tname, {})
         recent = prior_games[-10:]
-        n_rec = max(1, len(recent))
         min_sums = defaultdict(float); gp_cnts = defaultdict(int); st_cnts = defaultdict(int)
         for plist in recent:
             for pr in plist:
                 pid = str(pr["pid"])
-                min_sums[pid] += float(pr["min"])
+                min_sums[pid] += float(pr.get("toi") if pr.get("toi") is not None else pr.get("min", 0.0))
                 gp_cnts[pid] += 1
                 if pr.get("starter"):
                     st_cnts[pid] += 1
-        cands = []; seen = set()
-        all_pids = set(min_sums.keys()) | set(cur_roster.keys()) | set(base_mpg.keys())
+        cands = []
+        all_pids = set(min_sums.keys()) | set(cur_roster.keys())
         for pid in all_pids:
             if pid not in p_static:
                 continue
@@ -1499,21 +1498,18 @@ def main():
                 continue
             if is_player_blocked(tname, pid, p_static[pid]["fn"]):
                 continue
-            seen.add(pid)
             pos = str(p_static[pid].get("pos") or cur_roster.get(pid, {}).get("pos") or "")
             g_c = gp_cnts.get(pid, 0)
             obs_pg = (min_sums[pid] / g_c) if g_c > 0 else 0.0
-            prior_m = float(base_mpg.get(pid, 24.0 if pos == "G" else 15.0))
-            blend_toi = (g_c * obs_pg + 2.0 * prior_m) / (g_c + 2.0) if g_c > 0 else (prior_m * 0.65)
-            # Rank goalies by team-game share so backup goalies don't displace #1 starter or top skaters
-            rank_score = (min_sums[pid] / n_rec) if (pos == "G" and prior_games) else blend_toi
-            if blend_toi >= 5.0:
-                is_st = st_cnts.get(pid, 0) >= max(1, g_c // 2) if g_c > 0 else (blend_toi >= 17.5)
-                cands.append((pid, round(blend_toi, 1), is_st, pos, rank_score))
-        cands.sort(key=lambda x: (x[3] == "G" and x[4] >= 25.0, x[4], x[1], x[0]), reverse=True)
+            prior_m = float(base_mpg.get(pid, 55.0 if pos == "G" else 14.0))
+            blend_toi = (g_c * obs_pg + 2.0 * prior_m) / (g_c + 2.0) if g_c > 0 else (prior_m * 0.4)
+            if blend_toi >= 6.0:
+                is_st = st_cnts.get(pid, 0) >= max(1, g_c // 2)
+                cands.append((pid, round(blend_toi, 1), is_st, pos))
+        cands.sort(key=lambda x: (x[2], x[1]), reverse=True)
         chosen = []
         g_used = 0
-        for pid, toi_v, is_st, pos, _ in cands:
+        for pid, toi_v, is_st, pos in cands:
             if pos == "G":
                 if g_used >= max_goalies:
                     continue
@@ -1527,7 +1523,7 @@ def main():
         return _select_active_nhl(tname, d_iso, top_k=8, max_goalies=1)
 
     def get_pending_lineup_12(tname, d_iso):
-        return _select_active_nhl(tname, d_iso, top_k=12, max_goalies=2)
+        return _select_active_nhl(tname, d_iso, top_k=12, max_goalies=1)
 
     def get_out_list_formatted(tname):
         seen = set(); items = []

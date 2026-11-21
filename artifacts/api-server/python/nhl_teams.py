@@ -125,16 +125,49 @@ for _name, _code, _kcode, _arena, _tz in _RAW_NHL_32:
         "deg1": NHL_DEG1,
         "deg2": egem(_name) % 360,
         "deg3": egem(_arena) % 360,
+        "code_deg2": egem(_code) % 360,
         "tz": _tz,
         "arena": _arena,
+        "lat": "",
+        "lon": "",
         "code": _code,
         "kalshi": _kcode,
-        "fawe": word_fawe(_name),
+        "fawe": tuple(word_fawe(_name)),
     }
     TEAM_TO_CODE[_name] = _code
     TEAM_TO_KALSHI[_name] = _kcode
     TEAM_TO_TZ[_name] = _tz
     TEAM_TO_ARENA[_name] = _arena
+
+# Hydrate canonical TEM-GEM(DEG2), SUM-CITY-ARENA(DEG3), LAT/LON, and TZ from nhl_gem_sheet.json
+import json as _json
+import os as _os
+
+_GEM_PATH = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "nhl_gem_sheet.json")
+if _os.path.exists(_GEM_PATH):
+    try:
+        _gem_rows = _json.load(open(_GEM_PATH, "r", encoding="utf-8")).get("values", [])
+        for _r in _gem_rows[1:]:
+            if not _r or not str(_r[0]).strip():
+                continue
+            _tn = str(_r[0]).strip()
+            if _tn in TEAM_META_32:
+                TEAM_META_32[_tn]["deg2"] = int(float(_r[3])) % 360
+                TEAM_META_32[_tn]["deg3"] = int(float(_r[13])) % 360
+                if len(_r) > 24 and str(_r[24]).strip():
+                    TEAM_META_32[_tn]["code_deg2"] = int(float(_r[24])) % 360
+                if len(_r) > 7 and str(_r[7]).strip():
+                    TEAM_META_32[_tn]["arena"] = str(_r[7]).strip()
+                    TEAM_TO_ARENA[_tn] = TEAM_META_32[_tn]["arena"]
+                if len(_r) > 21:
+                    TEAM_META_32[_tn]["lat"] = str(_r[21]).strip()
+                if len(_r) > 22:
+                    TEAM_META_32[_tn]["lon"] = str(_r[22]).strip()
+                if len(_r) > 23 and str(_r[23]).strip():
+                    TEAM_META_32[_tn]["tz"] = str(_r[23]).strip()
+                    TEAM_TO_TZ[_tn] = TEAM_META_32[_tn]["tz"]
+    except Exception:
+        pass
 
 # Also register Utah Hockey Club metadata directly for backward compatibility if ever looked up raw
 TEAM_META_32["Utah Hockey Club"] = dict(TEAM_META_32["Utah Mammoth"])

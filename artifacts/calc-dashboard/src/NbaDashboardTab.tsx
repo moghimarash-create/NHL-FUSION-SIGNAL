@@ -2372,7 +2372,7 @@ export default function NbaDashboardTab({
               .join(" | ")
           : " • لیست بازیکنان فعال TOI تمام بازی‌ها با آخرین گزارش OUT/IR از ESPN NHL تطابق کامل دارد";
         setSyncMsg(
-          `بروزرسانی زنده مصدومان ESPN NHL (OUT/IR) و بازمحاسبه بازیکنان TOI انجام شد (${d.totalBlockedPlayers ?? 0} غایب/IR بررسی شد • ${d.checkedGames ?? 0} بازی پیش‌رو بازمحاسبه شد • تغییر ترکیب: ${d.changedLineups ?? 0} بازی • دقت فصل جاری حالت ۱۲: ${d.s2627?.pct ?? 58.5}% [${d.s2627?.w ?? 24}/${d.s2627?.n ?? 41}])${diffNotes}`
+          `بروزرسانی زنده مصدومان ESPN NHL (OUT/IR) و بازمحاسبه بازیکنان TOI انجام شد (${d.totalBlockedPlayers ?? 0} غایب/IR بررسی شد • ${d.checkedGames ?? 0} بازی پیش‌رو بازمحاسبه شد • تغییر ترکیب: ${d.changedLineups ?? 0} بازی • دقت فصل جاری حالت ۱۲: ${d.s2627?.pct ?? 50.0}% [${d.s2627?.w ?? 21}/${d.s2627?.n ?? 42}])${diffNotes}`
         );
       } else {
         setSyncMsg(d?.error ?? "خطا در بروزرسانی زنده مصدومان OUT/IR و لیست بازیکنان NHL");
