@@ -44,6 +44,10 @@ app.use((_req, res, next) => {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.get("/healthz", (_req, res) => {
+  res.status(200).json({ status: "ok", service: "NHL-FUSION-SIGNAL", version: "v82" });
+});
+
 app.use("/api", router);
 app.use("/fusion-rpc", router);
 

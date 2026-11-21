@@ -55,10 +55,13 @@ __pycache__/
 artifacts/logs/
 artifacts/api-server/logs/
 
-# Environment variables and secret keys
+# Environment variables, Railway CLI tokens, and secret keys
 .env
 .env.*
 !.env.example
+.railway*
+railway.env
+*.token
 *.pem
 *.key
 *service-account*.json

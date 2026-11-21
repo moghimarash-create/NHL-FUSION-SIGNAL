@@ -1,30 +1,18 @@
-FROM node:24-bookworm-slim
+# Stage 1: Build Python virtualenv (including compiled pyswisseph C extension)
+FROM node:24-bookworm-slim AS python-builder
 
-# Install Python 3.11, pip, venv, and required system libraries
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
     python3-venv \
-    python-is-python3 \
+    python3-dev \
     build-essential \
     ca-certificates \
-    curl \
   && rm -rf /var/lib/apt/lists/*
 
-# Install uv for Python package & lockfile management
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
-
-# Enable pnpm via Corepack without interactive prompts
-ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-RUN corepack enable && pnpm config set verify-deps-before-run false
-
-WORKDIR /app
-
-# 1. Install Python dependencies (both in .venv via uv and system-wide for subprocesses)
-COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen \
-  && uv pip install pytz numpy \
-  && pip3 install --no-cache-dir --break-system-packages \
+RUN python3 -m venv /opt/venv \
+  && /opt/venv/bin/pip install --no-cache-dir --upgrade pip \
+  && /opt/venv/bin/pip install --no-cache-dir \
     "google-auth>=2.50.0" \
     "gspread>=6.2.1" \
     "pyswisseph>=2.10.3.2" \
@@ -32,9 +20,14 @@ RUN uv sync --frozen \
     pytz \
     numpy
 
-ENV PATH="/app/.venv/bin:${PATH}"
+# Stage 2: Build TypeScript libraries, React/Vite frontend, and bundled Express API server
+FROM node:24-bookworm-slim AS node-builder
 
-# 2. Copy workspace manifests and install Node/TypeScript dependencies
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable && pnpm config set verify-deps-before-run false
+
+WORKDIR /app
+
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.base.json tsconfig.json ./
 COPY artifacts/api-server/package.json ./artifacts/api-server/package.json
 COPY artifacts/calc-dashboard/package.json ./artifacts/calc-dashboard/package.json
@@ -47,16 +40,44 @@ COPY scripts/package.json ./scripts/package.json
 
 RUN pnpm install --frozen-lockfile --allow-build=esbuild
 
-# 3. Copy full project source and build shared libraries, frontend, and API server
 COPY . .
 
 RUN pnpm run typecheck:libs \
   && PORT=8080 BASE_PATH=./ pnpm --filter @workspace/calc-dashboard run build \
   && pnpm --filter @workspace/api-server run build
 
+# Stage 3: Minimal production runtime (Node.js + Python 3 venv, no compiler toolchain or node_modules bloat)
+FROM node:24-bookworm-slim AS runner
+
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    python3 \
+    python-is-python3 \
+    ca-certificates \
+    curl \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY --from=python-builder /opt/venv /opt/venv
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
+
+WORKDIR /app
+
+COPY --from=node-builder /app/package.json ./package.json
+COPY --from=node-builder /app/artifacts/api-server/dist ./artifacts/api-server/dist
+COPY --from=node-builder /app/artifacts/api-server/python ./artifacts/api-server/python
+COPY --from=node-builder /app/artifacts/api-server/data ./artifacts/api-server/data
+COPY --from=node-builder /app/artifacts/calc-dashboard/dist ./artifacts/calc-dashboard/dist
+COPY --from=node-builder /app/artifacts/calc-dashboard/public ./artifacts/calc-dashboard/public
+COPY --from=node-builder /app/artifacts/data ./artifacts/data
+COPY --from=node-builder /app/data ./data
+
 ENV NODE_ENV=production
 ENV PORT=8080
+ENV DRY_RUN=true
 
 EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD curl -fsS "http://127.0.0.1:${PORT:-8080}/healthz" || exit 1
 
 CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
