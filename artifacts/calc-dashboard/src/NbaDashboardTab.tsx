@@ -425,6 +425,33 @@ type NbaGamePred = {
       h_p12?: { fn: string; no: string; pos: string; st: boolean; mpg: number; ep: string; ef?: string; gf: string; gff?: number; pwr?: number }[];
       a_p12?: { fn: string; no: string; pos: string; st: boolean; mpg: number; ep: string; ef?: string; gf: string; gff?: number; pwr?: number }[];
     };
+    nhl_ice?: {
+      ph_ice: number;
+      hel_ice: string;
+      ael_ice: string;
+      hrk_ice: number;
+      ark_ice: number;
+      hb2b: boolean;
+      ab2b: boolean;
+      h_dom: string;
+      a_dom: string;
+      dual_water: boolean;
+      m15_code: string;
+      m15_reason_fa: string;
+      m16_kind: string;
+      m16_reason_fa: string;
+    };
+  };
+  ice_wtp?: {
+    ph_ice: number;
+    sh: number;
+    sa: number;
+    hel_ice: string;
+    ael_ice: string;
+    hrk_ice: number;
+    ark_ice: number;
+    hb2b: boolean;
+    ab2b: boolean;
   };
   wtp?: {
     mon: string;
@@ -815,9 +842,9 @@ const TWIN_PATTERN_DEFS: {
   },
   {
     key: "twF1Wtp",
-    titleFa: "سیگنال‌های نهایی موتور جدید فعال (حالت پیش‌فرض ۱۲: ۹۱٫۸٪ برون‌نمونه • ۹۳٫۸٪ فصل جاری)",
+    titleFa: "سیگنال‌های نهایی موتور فعال هاکی NHL (حالت پیش‌فرض ۱۵: کالیبره‌شده DEG1=88 + ۱ گلر و ۷ اسکیت‌باز)",
     titleEn: "Active Fusion Engine — Qualified Final Signals",
-    formulaFa: "تمام سیگنال‌های نهایی تاییدشده توسط موتور تلفیقی انتخاب‌شده در نوار بالا (شامل ۱xxx، Σ8، GF-FIN، Σ3 و قوانین ضدحذف)",
+    formulaFa: "تمام سیگنال‌های نهایی تاییدشده توسط موتور تلفیقی انتخاب‌شده در نوار بالا (شامل ابرقفل یخ حالت ۱۵، سپر FIRE/AIR و ۱۶ حالت تلفیقی)",
   },
   {
     key: "twF1Guard",
@@ -884,6 +911,8 @@ function buildKalshiNbaTicker(dateStr: string, awayTeam: string, homeTeam: strin
 }
 
 export type FusionModeKey =
+  | "nhl_ice_ultralock"
+  | "nhl_anti_nobet"
   | "tri_gf_ultralock"
   | "anti_nobet_smart"
   | "total_elem_12"
@@ -1873,7 +1902,7 @@ function evalSmartAntiNoBet(g: NbaGamePred) {
 }
 
 export default function NbaDashboardTab({
-  fusionMode = "tri_gf_ultralock",
+  fusionMode = "nhl_ice_ultralock",
   twinDbKind = "team",
 }: {
   fusionMode?: FusionModeKey;
@@ -1960,6 +1989,8 @@ export default function NbaDashboardTab({
       const hit: "WIN" | "LOSS" = pick === g.aw ? "WIN" : "LOSS";
       const allowMode1VetoHint = isPure2EngineMode && Boolean(g.fusion_meta?.vetoed);
       const bypassDailyEarth =
+        fusionMode === "nhl_ice_ultralock" ||
+        fusionMode === "nhl_anti_nobet" ||
         fusionMode === "pos_inv_lock" ||
         fusionMode === "gf_fin_pure" ||
         fusionMode === "tri_gf_routed" ||
@@ -2093,7 +2124,7 @@ export default function NbaDashboardTab({
   const [showMonthlyTable, setShowMonthlyTable] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
   const PAGE_SIZE = 30;
-  const MASTER_DATA_VERSION = "v82";
+  const MASTER_DATA_VERSION = "v83";
 
   useEffect(() => {
     let cancelled = false;
@@ -2951,9 +2982,11 @@ export default function NbaDashboardTab({
               {/* Live Daily Win/Loss Scoreboard Driven by Active Fusion Engine */}
               {(() => {
                 const modeTitleMap: Record<FusionModeKey, string> = {
+                  nhl_ice_ultralock: "حالت ۱۵ (ابرقفل اختصاصی هاکی NHL • DEG1=88 + ۱ گلر و ۷ اسکیت‌باز)",
+                  nhl_anti_nobet: "حالت ۱۶ (ضد NO-BET هوشمند هاکی NHL • سپر FIRE/AIR + همزاد)",
                   tri_gf_ultralock: "حالت ۱۲ (ابرقفل ۳ عددی + Σ3 + ضدحذف)",
                   anti_nobet_smart: "حالت ۱۳ (ضد NO-BET هوشمند: مستقیم + عکس)",
-                  total_elem_12: "حالت ۱۴ (قطبیت کامل المنت کل ۱۲ بازیکن + تیم)",
+                  total_elem_12: "حالت ۱۴ (قطبیت کامل المنت کل ۱ گلر + ۱۱ اسکیت‌باز + تیم)",
                   tri_gf_routed: "حالت ۱۱ (موتور مستقل ۳ عددی + Σ3 + ضدحذف)",
                   gf_fin_pure: "حالت ۱۰ (موتور خالص GF-FIN)",
                   pos_inv_lock: "حالت ۹ (قفل جامع v5 + داور GF-FIN)",
@@ -3502,6 +3535,13 @@ export default function NbaDashboardTab({
                     const pickPosInvOk = Boolean(
                       usePosInvInCombo && !manualOverridden && !cardFlipDir[g.n] && posInvWin && posInvWin === winnerTeam
                     );
+                    const pickM15Ok = Boolean(
+                      !manualOverridden &&
+                        !cardFlipDir[g.n] &&
+                        (fusionMode === "nhl_ice_ultralock" || fusionMode === "nhl_anti_nobet") &&
+                        curModeSig &&
+                        mCur?.pick === winnerTeam
+                    );
                     const pickM12Ok = Boolean(!manualOverridden && !cardFlipDir[g.n] && fusionMode === "tri_gf_ultralock" && m12Sig && m12?.pick === winnerTeam);
                     const pickM14Ok = Boolean(!manualOverridden && !cardFlipDir[g.n] && fusionMode === "total_elem_12" && curModeSig && mCur?.pick === winnerTeam);
                     const pickAnbOk = Boolean(!manualOverridden && !cardFlipDir[g.n] && fusionMode === "anti_nobet_smart" && curModeSig && mCur?.pick === winnerTeam);
@@ -3532,30 +3572,42 @@ export default function NbaDashboardTab({
                         g1?.m12_route?.code === "ULTRA_3OF3_CLASH_HOLD"
                     );
                     const comboTier: 0 | 1 | 2 | 3 =
-                      fusionMode === "total_elem_12"
-                        ? pickDualEarthHold
-                          ? 0
-                          : pickM14Ok && Boolean(mCur?.vip)
-                            ? 3
-                            : pickM14Ok
-                              ? 2
-                              : 0
-                        : pickDualEarthHold || pick3of3ClashHold
-                          ? 0
-                          : pickM12Ok || (pickAnbOk && Boolean(mCur?.vip)) || pickM7Ok || pickPosInvOk || (pickM11Ok && Boolean(m11?.vip))
-                            ? 3
-                            : pickAnbOk || pickM8Ok || pickM11Ok
-                              ? 2
-                              : pickSafeOk
-                                ? 1
-                                : 0;
-                    const lockStatusLabel =
-                      pickDualEarthHold
-                        ? "⛔ رد تقابل دو EARTH"
+                      fusionMode === "nhl_ice_ultralock" || fusionMode === "nhl_anti_nobet"
+                        ? pickM15Ok && Boolean(mCur?.vip)
+                          ? 3
+                          : pickM15Ok
+                            ? 2
+                            : 0
                         : fusionMode === "total_elem_12"
-                          ? pickM14Ok
-                            ? `🧬 حالت ۱۴: ${g.fusion_meta?.total_elem_12?.flipped ? "معکوس ضد EARTH" : "قفل قطبیت المنت کل"}`
-                            : "— خارج از سیگنال موتور ۱۴"
+                          ? pickDualEarthHold
+                            ? 0
+                            : pickM14Ok && Boolean(mCur?.vip)
+                              ? 3
+                              : pickM14Ok
+                                ? 2
+                                : 0
+                          : pickDualEarthHold || pick3of3ClashHold
+                            ? 0
+                            : pickM12Ok || (pickAnbOk && Boolean(mCur?.vip)) || pickM7Ok || pickPosInvOk || (pickM11Ok && Boolean(m11?.vip))
+                              ? 3
+                              : pickAnbOk || pickM8Ok || pickM11Ok
+                                ? 2
+                                : pickSafeOk
+                                  ? 1
+                                  : 0;
+                    const lockStatusLabel =
+                      fusionMode === "nhl_ice_ultralock" || fusionMode === "nhl_anti_nobet"
+                        ? pickM15Ok
+                          ? fusionMode === "nhl_ice_ultralock"
+                            ? "🏒 حالت ۱۵: ابرقفل یخ DEG1=88"
+                            : "🏒 حالت ۱۶: ضد NO-BET هاکی"
+                          : "— خارج از سیگنال هاکی DEG1=88"
+                        : pickDualEarthHold
+                          ? "⛔ رد تقابل دو EARTH"
+                          : fusionMode === "total_elem_12"
+                            ? pickM14Ok
+                              ? `🧬 حالت ۱۴: ${g.fusion_meta?.total_elem_12?.flipped ? "معکوس ضد EARTH" : "قفل قطبیت المنت کل"}`
+                              : "— خارج از سیگنال موتور ۱۴"
                           : pick3of3ClashHold
                             ? "⛔ مهار همزاد برابر ۳/۳"
                             : pickAnbOk
@@ -4285,7 +4337,7 @@ export default function NbaDashboardTab({
                         <div className="p-3 space-y-2.5 bg-indigo-50/30 border-t border-indigo-200/80">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-950 border border-emerald-400 text-[11px] font-extrabold">
-                              استراتزی کمبو: {fusionMode === "tri_gf_ultralock" ? "حالت ۱۲ (ابرقفل ۳ عددی)" : fusionMode === "anti_nobet_smart" ? "حالت ۱۳ (ضد NO-BET هوشمند)" : fusionMode === "total_elem_12" ? "حالت ۱۴ (المنت کل ۱۲P+تیم)" : fusionMode === "tri_gf_routed" ? "حالت ۱۱ (۳ عددی مستقل)" : fusionMode === "earth_neg_lock" ? "حالت ۷ (خالص منفی)" : "حالت ۹ (قفل ایمن)"} • کل قفل ایمن: {safePoolOrders.length} بازی
+                              استراتزی کمبو: {fusionMode === "nhl_ice_ultralock" ? "حالت ۱۵ (ابرقفل هاکی DEG1=88)" : fusionMode === "nhl_anti_nobet" ? "حالت ۱۶ (ضد NO-BET هاکی)" : fusionMode === "tri_gf_ultralock" ? "حالت ۱۲ (ابرقفل ۳ عددی)" : fusionMode === "anti_nobet_smart" ? "حالت ۱۳ (ضد NO-BET هوشمند)" : fusionMode === "total_elem_12" ? "حالت ۱۴ (المنت کل ۱۲P+تیم)" : fusionMode === "tri_gf_routed" ? "حالت ۱۱ (۳ عددی مستقل)" : fusionMode === "earth_neg_lock" ? "حالت ۷ (خالص منفی)" : "حالت ۹ (قفل ایمن)"} • کل قفل ایمن: {safePoolOrders.length} بازی
                             </span>
                             <div className="flex flex-wrap items-center gap-1.5">
                               <button
@@ -5063,12 +5115,17 @@ export default function NbaDashboardTab({
                       const isTriUltraMode = fusionMode === "tri_gf_ultralock";
                       const isAntiNoBetMode = fusionMode === "anti_nobet_smart";
                       const isTotalElem12Mode = fusionMode === "total_elem_12";
+                      const isNhlIceUltraMode = fusionMode === "nhl_ice_ultralock";
+                      const isNhlIceAnbMode = fusionMode === "nhl_anti_nobet";
+                      const isNhlIceFamily = isNhlIceUltraMode || isNhlIceAnbMode;
                       const isTriUltraFamily = isTriUltraMode || isAntiNoBetMode;
                       const isTriAntiDropMode = isTriRoutedMode || isTriUltraFamily || isTotalElem12Mode;
                       const presetShortMap: Record<FusionModeKey, string> = {
+                        nhl_ice_ultralock: "حالت ۱۵ (ابرقفل هاکی NHL • DEG1=88 + ۱ گلر و ۷ اسکیت‌باز)",
+                        nhl_anti_nobet: "حالت ۱۶ (ضد NO-BET هاکی NHL • سپر FIRE/AIR + همزاد)",
                         tri_gf_ultralock: "حالت ۱۲ (ابرقفل ۳ عددی + ضدحذف)",
                         anti_nobet_smart: "حالت ۱۳ (ضد NO-BET هوشمند: مستقیم + عکس)",
-                        total_elem_12: "حالت ۱۴ (قطبیت المنت کل ۱۲ بازیکن + تیم)",
+                        total_elem_12: "حالت ۱۴ (قطبیت المنت کل ۱ گلر + ۱۱ اسکیت‌باز + تیم)",
                         tri_gf_routed: "حالت ۱۱ (۳ عددی مستقل + ضدحذف)",
                         gf_fin_pure: "حالت ۱۰ (موتور خالص GF-FIN)",
                         pos_inv_lock: "حالت ۹ (قفل جامع v5)",
@@ -5516,13 +5573,40 @@ export default function NbaDashboardTab({
                       const rowPlayerOnly: CheckRow = {
                         key: "player_eng",
                         testId: `row-player-eng-${g.n}`,
-                        stepTitle: "موتور ۸ بازیکن (P)",
+                        stepTitle: "موتور ۱ گلر + ۷ اسکیت‌باز (P)",
+                        stepSub: "وزن TOI • DEG1=88",
                         hText: pm.pick === g.h ? `${pm.pct} (${pm.votes})` : "—",
                         hSub: pm.pick === g.h ? `F30:${pm.f30 >= 0 ? `+${pm.f30}` : pm.f30}` : undefined,
                         hTick: pm.pick === g.h && pm.sig ? "pass" : "none",
                         aText: pm.pick === g.a ? `${pm.pct} (${pm.votes})` : "—",
                         aSub: pm.pick === g.a ? `F30:${pm.f30 >= 0 ? `+${pm.f30}` : pm.f30}` : undefined,
                         aTick: pm.pick === g.a && pm.sig ? "pass" : "none",
+                      };
+
+                      const nhlIceMeta = g.fusion_meta?.nhl_ice;
+                      const iceWtp = g.ice_wtp;
+                      const hIceEl = String(nhlIceMeta?.hel_ice || iceWtp?.hel_ice || hEl);
+                      const aIceEl = String(nhlIceMeta?.ael_ice || iceWtp?.ael_ice || aEl);
+                      const hPhIce = Number((nhlIceMeta?.ph_ice ?? iceWtp?.ph_ice ?? hL5).toFixed(1));
+                      const aPhIce = Number((100 - hPhIce).toFixed(1));
+                      const hIceYang = hIceEl === "FIRE" || hIceEl === "AIR";
+                      const aIceYang = aIceEl === "FIRE" || aIceEl === "AIR";
+                      const rowIceYangShield: CheckRow = {
+                        key: "nhl_ice_yang",
+                        testId: `row-nhl-ice-${g.n}`,
+                        stepTitle: "سپر یخ هاکی (FIRE/AIR • Pyth 2.05)",
+                        stepSub:
+                          nhlIceMeta?.hb2b && !nhlIceMeta?.ab2b
+                            ? "خستگی B2B میزبان"
+                            : nhlIceMeta?.ab2b && !nhlIceMeta?.hb2b
+                              ? "خستگی B2B میهمان"
+                              : "سپر یانگ DEG1=88 برابر تله سرد WATER/EARTH",
+                        hText: hIceYang ? `سپر ${hIceEl}` : `تله ${hIceEl}`,
+                        hSub: `${hPhIce}% • #${nhlIceMeta?.hrk_ice ?? g.wtp?.hrk ?? 16}${nhlIceMeta?.hb2b ? " • B2B" : ""}`,
+                        hTick: hIceYang && hPhIce >= 58.0 ? "pass" : !hIceYang ? "trap" : "none",
+                        aText: aIceYang ? `سپر ${aIceEl}` : `تله ${aIceEl}`,
+                        aSub: `${aPhIce}% • #${nhlIceMeta?.ark_ice ?? g.wtp?.ark ?? 16}${nhlIceMeta?.ab2b ? " • B2B" : ""}`,
+                        aTick: aIceYang && aPhIce >= 60.0 ? "pass" : !aIceYang ? "trap" : "none",
                       };
 
                       const t12 = g.fusion_meta?.total_elem_12;
@@ -5662,19 +5746,21 @@ export default function NbaDashboardTab({
 
                       const checklistRows: CheckRow[] = isPureGfFinMode
                         ? [rowGfAndS3]
-                        : isTotalElem12Mode
-                          ? [rowT12Warm, rowT12Cold, rowT12Delta, rowT12Sum, rowT12DomElem]
-                          : isTriUltraFamily
-                            ? [rowWarm1xxx, rowAll8, rowGfAndS3, rowCold0, rowTwinCombined, rowStandings]
-                            : isTriRoutedMode
-                              ? [rowWarm1xxx, rowAll8, rowGfAndS3, rowCold0, rowStandings]
-                              : fusionMode === "earth_neg_lock" || fusionMode === "safe_dl_core" || fusionMode === "pos_inv_lock"
-                                ? [rowWarm1xxx, rowAll8, rowGfAndS3, rowTwinCombined, rowStandings]
-                                : fusionMode === "double_pwr_lock"
-                                  ? [rowWarm1xxx, rowAll8, rowTwinCombined]
-                                  : fusionMode === "geo_1xxx_lock"
-                                    ? [rowWarm1xxx, rowTwinCombined]
-                                    : [rowTeamOnly, rowPlayerOnly, rowStandings];
+                        : isNhlIceFamily
+                          ? [rowTeamOnly, rowPlayerOnly, rowWarm1xxx, rowT12DomElem, rowIceYangShield]
+                          : isTotalElem12Mode
+                            ? [rowT12Warm, rowT12Cold, rowT12Delta, rowT12Sum, rowT12DomElem]
+                            : isTriUltraFamily
+                              ? [rowWarm1xxx, rowAll8, rowGfAndS3, rowCold0, rowTwinCombined, rowStandings]
+                              : isTriRoutedMode
+                                ? [rowWarm1xxx, rowAll8, rowGfAndS3, rowCold0, rowStandings]
+                                : fusionMode === "earth_neg_lock" || fusionMode === "safe_dl_core" || fusionMode === "pos_inv_lock"
+                                  ? [rowWarm1xxx, rowAll8, rowGfAndS3, rowTwinCombined, rowStandings]
+                                  : fusionMode === "double_pwr_lock"
+                                    ? [rowWarm1xxx, rowAll8, rowTwinCombined]
+                                    : fusionMode === "geo_1xxx_lock"
+                                      ? [rowWarm1xxx, rowTwinCombined]
+                                      : [rowTeamOnly, rowPlayerOnly, rowStandings];
 
                       const homeTicks = checklistRows.filter((r) => r.hTick === "pass").length;
                       const awayTicks = checklistRows.filter((r) => r.aTick === "pass").length;
@@ -6062,63 +6148,91 @@ export default function NbaDashboardTab({
                         TOT12_HOLD: "مسیر پایه دوقطبی موتور ۱۴ (خارج از شرط قفل ورود)",
                       };
 
+                      const m15Code = nhlIceMeta?.m15_code ?? "";
+                      const m16Kind = nhlIceMeta?.m16_kind ?? "";
+                      const m15LockTitleMap: Record<string, string> = {
+                        ICE_DIAMOND: "الماس دو موتور هاکی (T∩P • DEG1=88) + سپر یخ",
+                        ICE_YANG_TWIN_LOCK: "ابرقفل هاکی DEG1=88: همزاد دو-ستونی + سپر FIRE/AIR + ۱ گلر و ۷ اسکیت‌باز",
+                        ICE_UNION_ASTRO_LOCK: "قفل اتحاد همزاد + نجوم F30 + سپر FIRE/AIR هاکی",
+                        ICE_YIN_TRAP_HOLD: "توقف ایمنی هاکی: مهار تله قطب سرد (WATER / EARTH)",
+                        ICE_ELEM_TIE_HOLD: "توقف ایمنی هاکی: مهار برابری المنت کل (TIE / ۲×WATER)",
+                        ICE_B2B_FATIGUE_HOLD: "توقف ایمنی هاکی: مهار خستگی Back-to-Back بدون استراحت",
+                        ICE_PROB_HOLD: "خارج از حد نصاب احتمال برد پیتاگورین هاکی (۵۸٪ میزبان / ۶۰٪ میهمان)",
+                        ICE_HOLD: "مسیر پایه کفه یخ هاکی (بدون احراز شرایط ابرقفل حالت ۱۵)",
+                      };
+                      const m16TitleMap: Record<string, string> = {
+                        M15_CORE: m15LockTitleMap[m15Code] || "سیگنال اصلی حالت ۱۵ هاکی تایید شد",
+                        YANG_UNION_RELEASE: "گروه ۱ ضد NO-BET هاکی: آزادسازی اتحاد همزاد با سپر FIRE/AIR",
+                        CONTENDER_YIN_MISMATCH: "گروه ۲ ضد NO-BET هاکی: مدعی FIRE/AIR برابر تله سرد WATER/EARTH + توافق دو همزاد",
+                        ICE_HOLD_NEUTRAL: m15LockTitleMap[m15Code] || "توقف خنثی ضد NO-BET هاکی (خارج از شرایط ایمن)",
+                      };
+
                       const isSafetyHold = Boolean(
                         !isQualified &&
-                          ((isTriUltraFamily && (hEl === "EARTH" && aEl === "EARTH")) ||
+                          ((isNhlIceFamily && m15Code.endsWith("_HOLD") && m15Code !== "ICE_HOLD") ||
+                            (isTriUltraFamily && (hEl === "EARTH" && aEl === "EARTH")) ||
                             (isTotalElem12Mode && (sm14.kind === "M14_VETO_TRAP" || sm14.dualWaterTrap)) ||
                             (isTriUltraMode && (m12Code === "ULTRA_DUAL_EARTH_HOLD" || m12Code === "ULTRA_3OF3_CLASH_HOLD" || m12Code === "ULTRA_GF_HOLD")) ||
                             (isAntiNoBetMode && (anb.kind === "HOLD_DUAL_EARTH" || anb.kind === "HOLD_3OF3_CLASH")) ||
-                            (!isPureGfFinMode && !isTriAntiDropMode && (!pickEarthOk || !pickNegOk)))
+                            (!isPureGfFinMode && !isTriAntiDropMode && !isNhlIceFamily && (!pickEarthOk || !pickNegOk)))
                       );
 
                       const lockTitleFa = manualOverridden
                         ? "فیلتر دستی کاربر (۱۲ ستون همزاد)"
-                        : isTotalElem12Mode
-                          ? sm14.kind === "M14_TRAP_FLIP"
-                            ? "قانون ۱+۲ حالت ۱۴: تشخیص تله روی تیم بازنده و چرخش برد به تیم عکس"
-                            : sm14.kind === "M14_OPPOSITE_FLIP"
-                              ? "قانون ۲ حالت ۱۴: چرخش هوشمند به تیم عکس فاقد شرایط"
-                              : sm14.kind === "M14_DIRECT_RELEASE"
-                                ? "قانون ۳ حالت ۱۴: آزادسازی مستقیم با احتمال برد قاطع (Log5≥75%)"
-                                : sm14.kind === "M14_VETO_TRAP"
-                                  ? "قانون ۱ حالت ۱۴: مهار تله تیم بازنده (چرخش مسیر جایگزین به تیم عکس • بدون بت)"
-                                  : t12TitleMap[t12Code] || "موتور المنت کل ۱۲ بازیکن + تیم"
-                          : isAntiNoBetMode
-                            ? anbTitleMap[anb.kind]
-                            : isTriUltraMode
-                              ? m12LockTitleMap[m12Code] || "ابرقفل ۳ عددی تلفیقی حالت ۱۲"
-                              : isTriRoutedMode
-                                ? g1.m11_route?.flipped
-                                  ? `چرخش ضدحذف موتور ۳ عددی مستقل (${m11Code || "ROUTED"})`
-                                  : isQualified
-                                    ? `قفل ۳ عددی مستقل بدون همزاد (${m11Code || "M11"})`
-                                    : "مسیر پایه ۳ عددی مستقل (بدون احراز قفل)"
-                                : isPureGfFinMode
-                                  ? `موتور خالص GF-FIN (کمتر/منفی‌تر برنده • ΔGF=${gfAbsDiff})`
-                                  : fusionMode === "pos_inv_lock" && g1.pos_inv?.triggered
-                                    ? "قفل معکوس دو-مثبت (+,+) در حالت ۹"
-                                    : isGfRescued
-                                      ? `قفل داور ۲ از ۳ شاخص GF-FIN (ΔGF=${gfAbsDiff})`
-                                      : isSafeDl
-                                        ? "قفل ایمن دوگانه ۱xxx + Σ(8) + ضد EARTH + لنگر منفی"
-                                        : !pickEarthOk
-                                          ? "توقف قفل ضد EARTH"
-                                          : !pickNegOk && !isPure2EngineMode
-                                            ? "توقف قفل لنگر منفی"
-                                            : activePresetLabel;
+                        : isNhlIceUltraMode
+                          ? m15LockTitleMap[m15Code] || activePresetLabel
+                          : isNhlIceAnbMode
+                            ? m16TitleMap[m16Kind] || activePresetLabel
+                            : isTotalElem12Mode
+                              ? sm14.kind === "M14_TRAP_FLIP"
+                                ? "قانون ۱+۲ حالت ۱۴: تشخیص تله روی تیم بازنده و چرخش برد به تیم عکس"
+                                : sm14.kind === "M14_OPPOSITE_FLIP"
+                                  ? "قانون ۲ حالت ۱۴: چرخش هوشمند به تیم عکس فاقد شرایط"
+                                  : sm14.kind === "M14_DIRECT_RELEASE"
+                                    ? "قانون ۳ حالت ۱۴: آزادسازی مستقیم با احتمال برد قاطع (Log5≥75%)"
+                                    : sm14.kind === "M14_VETO_TRAP"
+                                      ? "قانون ۱ حالت ۱۴: مهار تله تیم بازنده (چرخش مسیر جایگزین به تیم عکس • بدون بت)"
+                                      : t12TitleMap[t12Code] || "موتور المنت کل ۱۲ بازیکن + تیم"
+                              : isAntiNoBetMode
+                                ? anbTitleMap[anb.kind]
+                                : isTriUltraMode
+                                  ? m12LockTitleMap[m12Code] || "ابرقفل ۳ عددی تلفیقی حالت ۱۲"
+                                  : isTriRoutedMode
+                                    ? g1.m11_route?.flipped
+                                      ? `چرخش ضدحذف موتور ۳ عددی مستقل (${m11Code || "ROUTED"})`
+                                      : isQualified
+                                        ? `قفل ۳ عددی مستقل بدون همزاد (${m11Code || "M11"})`
+                                        : "مسیر پایه ۳ عددی مستقل (بدون احراز قفل)"
+                                    : isPureGfFinMode
+                                      ? `موتور خالص GF-FIN (کمتر/منفی‌تر برنده • ΔGF=${gfAbsDiff})`
+                                      : fusionMode === "pos_inv_lock" && g1.pos_inv?.triggered
+                                        ? "قفل معکوس دو-مثبت (+,+) در حالت ۹"
+                                        : isGfRescued
+                                          ? `قفل داور ۲ از ۳ شاخص GF-FIN (ΔGF=${gfAbsDiff})`
+                                          : isSafeDl
+                                            ? "قفل ایمن دوگانه ۱xxx + Σ(8) + ضد EARTH + لنگر منفی"
+                                            : !pickEarthOk
+                                              ? "توقف قفل ضد EARTH"
+                                              : !pickNegOk && !isPure2EngineMode
+                                                ? "توقف قفل لنگر منفی"
+                                                : activePresetLabel;
 
                       const lockReasonFa =
-                        isTotalElem12Mode
-                          ? sm14.reasonFa
-                          : isAntiNoBetMode
-                            ? anb.reasonFa
-                            : isTriUltraMode && g1.m12_route?.reason_fa
-                              ? g1.m12_route.reason_fa
-                              : isTriRoutedMode && g1.m11_route?.reason_fa
-                                ? g1.m11_route.reason_fa
-                                : fusionMode === "pos_inv_lock" && g1.pos_inv?.reason_fa
-                                  ? g1.pos_inv.reason_fa
-                                  : "";
+                        isNhlIceUltraMode
+                          ? nhlIceMeta?.m15_reason_fa || ""
+                          : isNhlIceAnbMode
+                            ? nhlIceMeta?.m16_reason_fa || ""
+                            : isTotalElem12Mode
+                              ? sm14.reasonFa
+                              : isAntiNoBetMode
+                                ? anb.reasonFa
+                                : isTriUltraMode && g1.m12_route?.reason_fa
+                                  ? g1.m12_route.reason_fa
+                                  : isTriRoutedMode && g1.m11_route?.reason_fa
+                                    ? g1.m11_route.reason_fa
+                                    : fusionMode === "pos_inv_lock" && g1.pos_inv?.reason_fa
+                                      ? g1.pos_inv.reason_fa
+                                      : "";
 
                       const cleanBorderCls =
                         isQualified && isVip3

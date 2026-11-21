@@ -23,9 +23,11 @@ sys.path.insert(0, HERE)
 import fusion_player_eval as pc
 from nhl_teams import NHL_DEG1, TEAM_META_32, TEAM_TO_CODE, TEAM_TO_TZ, norm_team
 from fusion_roster_sync import (
+    build_nhl_ice_snapshots,
     compute_total_elem_12_block,
     geo_code_from_ef_str,
     is_blocked_nhl_status,
+    make_ice_wtp_obj,
     recompute_all_fusion_modes,
     recompute_summary,
 )
@@ -95,37 +97,29 @@ live_roster_pids = {
 }
 
 base_mpg_2526 = defaultdict(dict)
+prior_2526_by_team = defaultdict(dict)
 for k_stp, rows in season_team_players.items():
     if k_stp.startswith("2025-26||"):
         tm_n = norm_team(k_stp.split("||", 1)[1])
         for r in rows:
-            base_mpg_2526[tm_n][str(r["pid"])] = float(r.get("toi") or r.get("mpg") or 16.0)
-
-
-def _select_top_lineup_with_goalie_cap(cands_sorted, top_k=8):
-    """Exact goalie cap from NHL-PLAYER-SIGNAL/build_all_player_modes.py."""
-    out = []
-    goalie_used = False
-    for pid, toi_val, is_st in cands_sorted:
-        pos = p_static[pid].get("pos", "")
-        if pos == "G":
-            if goalie_used:
-                continue
-            goalie_used = True
-        out.append((pid, toi_val, is_st))
-        if len(out) >= top_k:
-            break
-    return out
+            toi_r = float(r.get("toi") or r.get("mpg") or 15.0)
+            gp_r = int(r.get("gp") or 0)
+            tot_r = float(r.get("tot_min") or 0.0)
+            base_mpg_2526[tm_n][str(r["pid"])] = toi_r
+            prior_2526_by_team[tm_n][str(r["pid"])] = (toi_r, gp_r, tot_r)
 
 
 def get_pregame_lineup(tname, s_lbl, d_iso, is_pending=False, top_k=8):
-    """Exact pre-game TOI lineup selector from NHL-PLAYER-SIGNAL/build_all_player_modes.py."""
+    """
+    Clean Zero-Lookahead NHL 1-Goalie + Skaters Selector:
+      - Top-8  = AT MOST 1 active primary/starting Goalie (ranked by games started/played & total ice time)
+               + Top 7 active Skaters (C/LW/RW/F/D) weighted/sorted by TOI.
+      - Top-12 = AT MOST 1 active primary/starting Goalie + Top 11 active Skaters weighted/sorted by TOI.
+    """
     cur_roster = live_roster_pids.get(tname, {})
     if s_lbl == "2026-27":
         prior_games = [plist for (db, plist) in team_box_2627.get(tname, []) if db < d_iso]
-        base_toi = {}
-        for ps in season_team_players.get(f"2025-26||{tname}", []):
-            base_toi[str(ps["pid"])] = float(ps.get("toi") or ps.get("mpg") or 16.0)
+        p25 = prior_2526_by_team.get(tname, {})
         if prior_games:
             min_sums = defaultdict(float)
             gp_cnts = defaultdict(int)
@@ -138,7 +132,8 @@ def get_pregame_lineup(tname, s_lbl, d_iso, is_pending=False, top_k=8):
                     gp_cnts[pid_s] += 1
                     if pr.get("starter"):
                         st_cnts[pid_s] += 1
-            cands = []
+            goalie_cands = []
+            skater_cands = []
             all_pids = set(min_sums.keys()) | (set(cur_roster.keys()) if is_pending else set())
             for pid in all_pids:
                 if pid not in p_static:
@@ -151,14 +146,18 @@ def get_pregame_lineup(tname, s_lbl, d_iso, is_pending=False, top_k=8):
                         continue
                 g_c = gp_cnts.get(pid, 0)
                 obs_m = (min_sums[pid] / g_c) if g_c > 0 else 0.0
-                default_prior = 55.0 if p_static[pid].get("pos") == "G" else 14.0
-                prior_m = base_toi.get(pid, default_prior)
-                blend_toi = (g_c * obs_m + 2.0 * prior_m) / (g_c + 2.0) if g_c > 0 else (prior_m * 0.4)
-                if blend_toi >= 6.0:
-                    cands.append((pid, round(blend_toi, 1), st_cnts.get(pid, 0) >= max(1, g_c // 2)))
-            cands.sort(key=lambda x: (x[2], x[1]), reverse=True)
-            picked = _select_top_lineup_with_goalie_cap(cands, top_k=top_k)
-            if len(picked) >= 5:
+                pos_s = p_static[pid].get("pos", "")
+                is_g = pc.is_nhl_goalie(pos_s, obs_m)
+                pr_toi, pr_gp, _ = p25.get(pid, (56.0 if is_g else 14.0, 0, 0.0))
+                blend_toi = (g_c * obs_m + 2.0 * pr_toi) / (g_c + 2.0) if g_c > 0 else (pr_toi * 0.4)
+                if is_g:
+                    if g_c > 0 or (is_pending and pr_gp >= 10):
+                        goalie_cands.append((pid, blend_toi, st_cnts.get(pid, 0), min_sums.get(pid, 0.0), pr_gp))
+                else:
+                    if blend_toi >= 6.0:
+                        skater_cands.append((pid, blend_toi, min_sums.get(pid, 0.0), st_cnts.get(pid, 0)))
+            picked = pc.select_nhl_1g_plus_skaters(goalie_cands, skater_cands, top_k=top_k)
+            if len(picked) >= min(6, top_k):
                 return picked
 
     raw_list = season_team_players.get(f"{s_lbl}||{tname}", [])
@@ -166,10 +165,20 @@ def get_pregame_lineup(tname, s_lbl, d_iso, is_pending=False, top_k=8):
         y0 = int(s_lbl[:4])
         raw_list = season_team_players.get(f"{y0-1}-{str(y0)[-2:]}||{tname}", [])
     if not raw_list and cur_roster:
-        raw_list = [{"pid": pid, "toi": 16.0} for pid in cur_roster]
+        raw_list = [
+            {"pid": pid, "toi": 56.0 if pc.is_nhl_goalie(p.get("pos")) else 16.0, "gp": 20, "tot_min": 300.0, "pos": p.get("pos", "")}
+            for pid, p in cur_roster.items()
+        ]
 
-    cands = []
-    for idx_p, r in enumerate(raw_list):
+    goalie_cands = []
+    skater_cands = []
+    qual_skaters = [
+        r for r in raw_list
+        if not pc.is_nhl_goalie(r.get("pos"), r.get("toi", r.get("mpg", 0))) and int(r.get("gp", 0)) >= 15
+    ]
+    min_gp_req = 15 if len(qual_skaters) >= (top_k - 1) else 0
+
+    for r in raw_list:
         pid = str(r["pid"])
         if pid not in p_static:
             continue
@@ -178,9 +187,16 @@ def get_pregame_lineup(tname, s_lbl, d_iso, is_pending=False, top_k=8):
                 continue
             if is_blocked_nhl_status(cur_roster[pid].get("status", "")):
                 continue
-        toi_v = max(8.0, float(r.get("toi") or r.get("mpg") or 16.0))
-        cands.append((pid, round(toi_v, 1), idx_p < 6))
-    return _select_top_lineup_with_goalie_cap(cands, top_k=top_k)
+        toi_v = max(8.0, float(r.get("toi") or r.get("mpg") or 15.0))
+        gp_v = int(r.get("gp") or 0)
+        tot_m = float(r.get("tot_min") or (gp_v * toi_v))
+        is_g = pc.is_nhl_goalie(p_static[pid].get("pos") or r.get("pos"), toi_v)
+        if is_g:
+            goalie_cands.append((pid, toi_v, gp_v, tot_m, gp_v))
+        else:
+            if gp_v >= min_gp_req:
+                skater_cands.append((pid, toi_v, tot_m, gp_v))
+    return pc.select_nhl_1g_plus_skaters(goalie_cands, skater_cands, top_k=top_k)
 
 
 def build_player_cards_8(d_ctx, lineup, tbl):
@@ -228,7 +244,24 @@ def parse_votes(g):
 
 t_map = {(g["d"], norm_team(g["h"]), norm_team(g["a"])): g for g in t_games}
 
-print("[3/5] Combining Team Engine + NHL-PLAYER-SIGNAL Mode C across all 4,136 games (14 Modes)...")
+done_hist_all = []
+sched_set_all = set()
+ice_cut_pairs = set()
+for r in p_hist_c:
+    d_r, s_r, h_r, a_r, hp_r, ap_r = str(r[0]), str(r[2]), norm_team(r[3]), norm_team(r[4]), int(r[5]), int(r[6])
+    sched_set_all.add((d_r, h_r))
+    sched_set_all.add((d_r, a_r))
+    done_hist_all.append({"d": d_r, "s": s_r, "h": h_r, "a": a_r, "hp": hp_r, "ap": ap_r, "mg": hp_r - ap_r})
+done_hist_all.sort(key=lambda x: x["d"])
+for gpc in pc_games:
+    d_g = gpc["d"]
+    h_g, a_g = norm_team(gpc["h"]), norm_team(gpc["a"])
+    sched_set_all.add((d_g, h_g))
+    sched_set_all.add((d_g, a_g))
+    ice_cut_pairs.add((d_g, gpc["s"]))
+all_ice_snaps = build_nhl_ice_snapshots(done_hist_all, ice_cut_pairs)
+
+print("[3/5] Combining Team Engine + NHL-PLAYER-SIGNAL Mode C across all 4,136 games (16 Modes)...")
 master_games = []
 parity_verified_2627 = False
 
@@ -301,9 +334,9 @@ for gpc in pc_games:
     g_out["a"] = a
     g_out["hc"] = TEAM_TO_CODE.get(h, gpc.get("hc", ""))
     g_out["ac"] = TEAM_TO_CODE.get(a, gpc.get("ac", ""))
+    g_out["ice_wtp"] = make_ice_wtp_obj(all_ice_snaps[(d_iso, s_lbl)], h, a, d_iso, sched_set_all)
 
-    # 8-player lineup: use ready h_players/a_players from NHL-PLAYER-SIGNAL when present,
-    # and reconstruct historical 2024-26 8-player arrays with the exact NHL-PLAYER-SIGNAL selector
+    # 8-player lineup (1 Primary Goalie + 7 Skaters by TOI)
     hp_list = [dict(p) for p in (gpc.get("h_players") or [])]
     ap_list = [dict(p) for p in (gpc.get("a_players") or [])]
     if hp_list and ap_list:
@@ -326,7 +359,7 @@ for gpc in pc_games:
     g_out["h_players"] = hp_list
     g_out["a_players"] = ap_list
 
-    # 12-player + Team+Arena entity polarity block for Mode 14 (total_elem_12)
+    # 12-player (1 Primary Goalie + 11 Skaters by TOI) + Team+Arena entity polarity block
     hl12 = get_pregame_lineup(h, s_lbl, d_iso, is_pend, top_k=12)
     al12 = get_pregame_lineup(a, s_lbl, d_iso, is_pend, top_k=12)
     t12_blk = compute_total_elem_12_block(
@@ -371,7 +404,7 @@ for gpc in pc_games:
     t_idx = gt.get("idx3") or {}
     p_idx = gpc.get("idx3") or {}
     g_out["fusion_meta"] = {
-        "mode": "dual_pillar",
+        "mode": "nhl_ice_ultralock",
         "tier": tier_code,
         "tier_fa": tier_fa,
         "driver": driver,
@@ -391,6 +424,7 @@ for gpc in pc_games:
             "ch": f"{t_idx.get('vh', 0)}H-{t_idx.get('va', 0)}A",
             "sig": t_sig,
             "vip": t_vip,
+            "union": bool(gt.get("f1_union", t_sig)),
             "deg2": TEAM_META_32[h]["deg2"],
             "deg3": TEAM_META_32[h]["deg3"],
         },
@@ -402,6 +436,7 @@ for gpc in pc_games:
             "ch": f"{p_idx.get('vh', 0)}H-{p_idx.get('va', 0)}A",
             "sig": p_sig,
             "vip": p_vip,
+            "union": bool(gpc.get("f1_union", p_sig)),
         },
     }
     if t12_blk:
@@ -413,7 +448,7 @@ for gpc in pc_games:
 assert parity_verified_2627, "2026-27 parity check with NHL-PLAYER-SIGNAL did not run!"
 print("  [OK] Verified 100% bit-for-bit player lineup & pwr parity with NHL-PLAYER-SIGNAL Mode C!")
 
-print("[4/5] Computing 14-Mode out-of-sample & full-overlap fusion benchmarks...")
+print("[4/5] Computing 16-Mode out-of-sample & full-overlap fusion benchmarks...")
 summary = recompute_summary(master_games)
 for mk, st in summary.items():
     h2527 = st["holdout_2527"]
@@ -443,23 +478,30 @@ json.dump(
 )
 json.dump(summary, open(os.path.join(PUB_DIR, "fusion_modes_summary.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=2)
 
+prior_gp_2526 = {
+    tm_n: {pid: vals[1] for pid, vals in pmap.items()}
+    for tm_n, pmap in prior_2526_by_team.items()
+}
+p_static_out = {
+    pid: {
+        "pid": ps["pid"],
+        "fn": ps["fn"],
+        "jn": ps["jn"],
+        "j_str": ps["j_str"],
+        "pos": ps["pos"],
+        "deg2": ps["deg2"],
+        "deg3": ps["deg3"],
+        "nam_fawe": list(ps["nam_fawe"]),
+    }
+    for pid, ps in p_static.items()
+}
 rt_out = {
     "team_tz_map": dict(TEAM_TO_TZ),
     "live_rosters": live_rosters,
     "base_mpg_2526": dict(base_mpg_2526),
-    "p_static": {
-        pid: {
-            "pid": ps["pid"],
-            "fn": ps["fn"],
-            "jn": ps["jn"],
-            "j_str": ps["j_str"],
-            "pos": ps["pos"],
-            "deg2": ps["deg2"],
-            "deg3": ps["deg3"],
-            "nam_fawe": list(ps["nam_fawe"]),
-        }
-        for pid, ps in p_static.items()
-    },
+    "prior_gp_2526": prior_gp_2526,
+    "p_static": p_static_out,
+    "player_static": p_static_out,
     "team_box_2627": dict(team_box_2627),
 }
 json.dump(rt_out, open(os.path.join(HERE, "fusion_roster_runtime.json"), "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))

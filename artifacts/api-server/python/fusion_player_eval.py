@@ -232,3 +232,42 @@ def fast_eval_entity(d_ctx, deg1, deg2, deg3, nam_fawe, tbl):
         "decan_lbl": f"{f2[7]} / {f3[7]}",
     }
     return ele_p, ele_fin, ele_dyn, m_dict
+
+
+def is_nhl_goalie(pos_str, toi_val=0.0):
+    """Classify NHL goalie strictly by position 'G' or goalie-scale TOI (>32m)."""
+    return str(pos_str or "").strip().upper() == "G" or float(toi_val or 0.0) > 32.0
+
+
+def select_nhl_1g_plus_skaters(goalie_cands, skater_cands, top_k=8):
+    """
+    Canonical NHL 1-Goalie + Skaters lineup selector:
+      - Top-8  = AT MOST 1 active primary/starting Goalie (ranked by games started/played & total ice time,
+                 NEVER allowing a backup goalie's 60m OT appearance to displace the #1 starter)
+               + Top 7 active Skaters (C/LW/RW/F/D) weighted/sorted by TOI per game.
+      - Top-12 = AT MOST 1 active primary/starting Goalie + Top 11 active Skaters weighted/sorted by TOI per game.
+    goalie_cands items: (pid, blend_toi, starts_or_gp, tot_min, prior_gp)
+    skater_cands items: (pid, blend_toi, tot_min, st_cnt)
+    Returns list of (pid, round(blend_toi, 1), is_starter_bool).
+    """
+    out = []
+    if goalie_cands:
+        g_sorted = sorted(
+            goalie_cands,
+            key=lambda x: (float(x[2]), float(x[3]), float(x[4]), float(x[1]), str(x[0])),
+            reverse=True,
+        )
+        g_pid, g_toi = g_sorted[0][0], g_sorted[0][1]
+        out.append((str(g_pid), round(float(g_toi), 1), True))
+
+    need_skaters = max(0, top_k - len(out))
+    sk_sorted = sorted(
+        skater_cands,
+        key=lambda x: (float(x[1]), float(x[2]), float(x[3]), str(x[0])),
+        reverse=True,
+    )
+    for idx_s, item in enumerate(sk_sorted[:need_skaters]):
+        s_pid, s_toi = item[0], item[1]
+        out.append((str(s_pid), round(float(s_toi), 1), idx_s < 5))
+    return out
+

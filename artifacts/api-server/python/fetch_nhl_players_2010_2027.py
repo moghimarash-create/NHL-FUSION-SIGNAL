@@ -239,17 +239,27 @@ def main():
             if r["pid"] not in by_pid or r["tot_min"] > by_pid[r["pid"]]["tot_min"]:
                 by_pid[r["pid"]] = r
         uniq = list(by_pid.values())
-        skaters = sorted([x for x in uniq if x["pos"] != "G"], key=lambda x: (x["tot_min"], x["mpg"], x["ppg"]), reverse=True)
-        goalies = sorted([x for x in uniq if x["pos"] == "G"], key=lambda x: (x["tot_min"], x["gp"], x["mpg"]), reverse=True)
-        # Combine top 1 goalie + top 13 skaters + #2 goalie -> sorted cleanly for Top-8 & Top-12 selection
+        for u in uniq:
+            if float(u.get("mpg", 0.0)) > 32.0 and u.get("pos") != "G":
+                u["pos"] = "G"
+        sk_all = [x for x in uniq if x["pos"] != "G"]
+        sk_qual = sorted([x for x in sk_all if int(x.get("gp", 0)) >= 15], key=lambda x: (x["mpg"], x["tot_min"], x["ppg"]), reverse=True)
+        sk_rem = sorted([x for x in sk_all if int(x.get("gp", 0)) < 15], key=lambda x: (x["tot_min"], x["mpg"], x["ppg"]), reverse=True)
+        skaters = sk_qual + sk_rem
+        goalies = sorted([x for x in uniq if x["pos"] == "G"], key=lambda x: (x["gp"], x["tot_min"], x["mpg"]), reverse=True)
+        # 1 Primary Starting Goalie (highest GP/tot_min) + Top 13 Skaters by TOI (backup goalie appended at end only as injury fallback)
         top_rot = []
         if goalies:
-            top_rot.append(goalies[0])
+            g1 = dict(goalies[0])
+            g1["is_primary_g"] = True
+            top_rot.append(g1)
         top_rot.extend(skaters[:13])
         if len(goalies) >= 2:
-            top_rot.append(goalies[1])
+            g2 = dict(goalies[1])
+            g2["is_backup_g"] = True
+            top_rot.append(g2)
         cleaned_stp[key] = top_rot
-        for r in top_rot[:14]:
+        for r in top_rot[:15]:
             pid = r["pid"]
             if pid not in player_master:
                 player_master[pid] = {
@@ -294,9 +304,9 @@ def main():
     missing_j = sum(1 for pid in need_jersey_pids if not player_master[pid].get("jersey"))
     print(f"  Historical NHL jerseys resolved! Remaining without jersey: {missing_j}/{len(need_jersey_pids)} ({time.time()-t0:.1f}s)")
 
-    # 4. Fetch 2026-27 NHL live scoreboards + boxscores (2026-10-04 through 2026-11-22)
+    # 4. Fetch 2026-27 NHL live scoreboards + boxscores (2026-09-29 through 2026-11-22, excluding preseason)
     print("[4/5] Fetching 2026-27 NHL scoreboards (with OT/SO) & game boxscores...")
-    start_d = datetime.date(2026, 10, 4)
+    start_d = datetime.date(2026, 9, 29)
     end_d = datetime.date(2026, 11, 22)
     dates_2627 = [(start_d + datetime.timedelta(days=i)) for i in range((end_d - start_d).days + 1)]
 
@@ -306,6 +316,8 @@ def main():
         d = fetch_json(f"https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates={ymd}")
         evts = []
         for ev in (d or {}).get("events", []):
+            if int(((ev.get("season") or {}).get("type")) or 2) == 1:
+                continue
             eid = str(ev.get("id", ""))
             st_type = (ev.get("status") or {}).get("type") or {}
             completed = bool(st_type.get("completed"))

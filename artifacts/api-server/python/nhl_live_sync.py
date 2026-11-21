@@ -193,6 +193,11 @@ def main():
         json.dump({"games": fast_games, "summary": doc["summary"], "fusion_modes_summary": doc["summary"]}, open(tmp_f, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
         os.replace(tmp_f, fast_path)
 
+        sum_path = os.path.join(pub_dir, "fusion_modes_summary.json")
+        tmp_s = sum_path + ".tmp"
+        json.dump(doc["summary"], open(tmp_s, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+        os.replace(tmp_s, sum_path)
+
         pred_path = os.path.join(pub_dir, "nhl_predictions_2024_2027.json")
         if os.path.exists(pred_path) and all_finals_by_date:
             try:
@@ -221,10 +226,11 @@ def main():
     sheet_synced = sync_fusion_sheets(games, doc.get("summary"), args.target_date or today_utc.isoformat())
 
     done_auth = [g for g in games if g.get("done") and (g.get("fusion_meta") or {}).get("in_auth_overlap")]
-    oos = [g for g in done_auth if (g.get("fusion_meta") or {}).get("modes", {}).get("tri_gf_ultralock", {}).get("sig")]
-    oos_w = sum(1 for g in oos if norm_team(g["fusion_meta"]["modes"]["tri_gf_ultralock"]["pick"]) == norm_team(g["aw"]))
+    flagship_mk = "nhl_ice_ultralock" if any("nhl_ice_ultralock" in ((g.get("fusion_meta") or {}).get("modes") or {}) for g in done_auth[:5]) else "tri_gf_ultralock"
+    oos = [g for g in done_auth if (g.get("fusion_meta") or {}).get("modes", {}).get(flagship_mk, {}).get("sig")]
+    oos_w = sum(1 for g in oos if norm_team(g["fusion_meta"]["modes"][flagship_mk]["pick"]) == norm_team(g["aw"]))
     s26 = [g for g in oos if g.get("s") == "2026-27"]
-    s26_w = sum(1 for g in s26 if norm_team(g["fusion_meta"]["modes"]["tri_gf_ultralock"]["pick"]) == norm_team(g["aw"]))
+    s26_w = sum(1 for g in s26 if norm_team(g["fusion_meta"]["modes"][flagship_mk]["pick"]) == norm_team(g["aw"]))
 
     payload = {
         "ok": True,

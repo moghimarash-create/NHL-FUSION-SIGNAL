@@ -161,6 +161,88 @@ class _NLSCompat:
 
 nls = _NLSCompat()
 
+def _pyth_nhl_ice(gf, ga, exp=2.05):
+    if gf <= 0 and ga <= 0:
+        return 0.5
+    if gf <= 0:
+        return 0.05
+    if ga <= 0:
+        return 0.95
+    return (gf ** exp) / ((gf ** exp) + (ga ** exp))
+
+def _log5_nhl_ice(pa, pb, ha=0.538):
+    pa = min(0.85, max(0.15, pa))
+    pb = min(0.85, max(0.15, pb))
+    num = pa * (1.0 - pb) * ha
+    den = num + (1.0 - pa) * pb * (1.0 - ha)
+    return num / den if den > 0 else 0.5
+
+def _ice_elem_of_team(strength_p):
+    if strength_p >= 0.545:
+        return "FIRE"
+    if strength_p >= 0.500:
+        return "AIR"
+    if strength_p >= 0.455:
+        return "WATER"
+    return "EARTH"
+
+def build_nhl_ice_snapshots(hist, cut_pairs):
+    """
+    Walk-forward Zero-Lookahead Hockey Strength Builder (exp=2.05 on Goals For/Against).
+    Strictly consumes ONLY games with r['d'] < cut_iso.
+    """
+    out = {}
+    th = {tm: [] for tm in NHL_TEAMS_32}
+    ptr = 0
+    n = len(hist)
+    for cut_iso, s_cur in sorted(set(cut_pairs)):
+        while ptr < n and hist[ptr]["d"] < cut_iso:
+            r = hist[ptr]
+            if r["mg"] != 0:
+                th.setdefault(r["h"], []).append((r["s"], r["mg"] > 0, r["hp"], r["ap"]))
+                th.setdefault(r["a"], []).append((r["s"], r["mg"] < 0, r["ap"], r["hp"]))
+            ptr += 1
+        pstr = {}
+        for tm, arr in th.items():
+            sp = [x for x in arr if x[0] == s_cur]
+            l30 = arr[-30:]
+            l10 = arr[-10:]
+            gp = len(sp)
+            w = sum(1 for x in sp if x[1])
+            gf = sum(x[2] for x in sp)
+            ga = sum(x[3] for x in sp)
+            l30_wp = sum(1 for x in l30 if x[1]) / len(l30) if l30 else 0.5
+            l30_py = _pyth_nhl_ice(sum(x[2] for x in l30), sum(x[3] for x in l30), 2.05) if l30 else 0.5
+            prior = 0.75 * (0.5 * l30_wp + 0.5 * l30_py) + 0.25 * 0.5
+            s_wp = (w + 12.0 * prior) / (gp + 12.0)
+            s_py = (gp * (_pyth_nhl_ice(gf, ga, 2.05) if gp > 0 else prior) + 12.0 * prior) / (gp + 12.0)
+            l10_wp = sum(1 for x in l10 if x[1]) / len(l10) if l10 else prior
+            pstr[tm] = 0.40 * s_wp + 0.45 * s_py + 0.15 * l10_wp
+        rk = {tm: i + 1 for i, tm in enumerate(sorted(pstr.keys(), key=lambda t: pstr[t], reverse=True))}
+        out[(cut_iso, s_cur)] = {"p": pstr, "rk": rk}
+    return out
+
+def make_ice_wtp_obj(ice_snap, h_tm, a_tm, d_iso, sched_set):
+    y, m, d = map(int, d_iso.split("-"))
+    yest_iso = (datetime.date(y, m, d) - datetime.timedelta(days=1)).isoformat()
+    sh = ice_snap["p"].get(h_tm, 0.5)
+    sa = ice_snap["p"].get(a_tm, 0.5)
+    hb2b = (yest_iso, h_tm) in sched_set
+    ab2b = (yest_iso, a_tm) in sched_set
+    ha_eff = 0.538 - (0.032 if hb2b and not ab2b else 0.0) + (0.032 if ab2b and not hb2b else 0.0)
+    ph_ice = round(_log5_nhl_ice(sh, sa, ha_eff) * 100.0, 1)
+    return {
+        "ph_ice": ph_ice,
+        "sh": round(sh * 100.0, 1),
+        "sa": round(sa * 100.0, 1),
+        "hel_ice": _ice_elem_of_team(sh),
+        "ael_ice": _ice_elem_of_team(sa),
+        "hrk_ice": ice_snap["rk"].get(h_tm, 16),
+        "ark_ice": ice_snap["rk"].get(a_tm, 16),
+        "hb2b": hb2b,
+        "ab2b": ab2b,
+    }
+
 INPUT_SHEET_ID = os.environ.get("NHL_FUSION_INPUT_SHEET_ID", "").strip()
 BLOCKED_STATUSES = {
     "out", "ir", "ir-lt", "ir-nr", "ltir",
@@ -1051,14 +1133,206 @@ def recompute_all_fusion_modes(g):
         t12_blk["reason_fa"] = m14_fa
         t12_blk["flipped"] = m14_flipped
 
+    # -------------------------------------------------------------------------
+    # Mode 15 (`nhl_ice_ultralock`) & Mode 16 (`nhl_anti_nobet`):
+    # Dedicated NHL DEG1=88 (28 GEMINI / AIR) Yang-Shielded Twin Super-Lock
+    # with 1 Primary Goalie + Skaters by TOI & True Hockey Pythagorean (exp=2.05)
+    # -------------------------------------------------------------------------
+    def _dom_vec4(vec):
+        if not vec or len(vec) != 4:
+            return "TIE"
+        names = ("FIRE", "AIR", "WATER", "EARTH")
+        mx = max(vec)
+        ws = [names[i] for i in range(4) if vec[i] == mx]
+        return ws[0] if len(ws) == 1 else "TIE"
+
+    icw = g.get("ice_wtp") or {}
+    ph_ice = float(icw.get("ph_ice", 53.8))
+    hel_ice = str(icw.get("hel_ice") or w_wk.get("hel") or "AIR")
+    ael_ice = str(icw.get("ael_ice") or w_wk.get("ael") or "AIR")
+    hrk_ice = int(icw.get("hrk_ice", w_wk.get("hrk", 16)))
+    ark_ice = int(icw.get("ark_ice", w_wk.get("ark", 16)))
+    hb2b_ice = bool(icw.get("hb2b", False))
+    ab2b_ice = bool(icw.get("ab2b", False))
+
+    h_dom13 = _dom_vec4((t12_blk or {}).get("h_ef_tot"))
+    a_dom13 = _dom_vec4((t12_blk or {}).get("a_ef_tot"))
+    dual_water_13 = (h_dom13 == "WATER" and a_dom13 == "WATER")
+
+    tm_meta = fm.get("team") or {}
+    pl_meta = fm.get("player") or {}
+    tpk_15 = norm_team(tm_meta.get("pick") or h)
+    ppk_15 = norm_team(pl_meta.get("pick") or h)
+    f30_t15 = int(tm_meta.get("f30") or 0)
+    f30_p15 = int(pl_meta.get("f30") or 0)
+    tu_15 = bool(tm_meta.get("union", tm_meta.get("sig", False)))
+    pu_15 = bool(pl_meta.get("union", pl_meta.get("sig", False)))
+    sgn_t15 = 1 if tpk_15 == h else -1
+    sgn_p15 = 1 if ppk_15 == h else -1
+    p_sup_t15 = (ppk_15 == tpk_15) or (f30_p15 * sgn_t15 > 0)
+    t_sup_p15 = (tpk_15 == ppk_15) or (f30_t15 * sgn_p15 > 0)
+
+    ice_fb_pick = h if ph_ice >= 55.0 else (a if (100.0 - ph_ice) >= 55.0 else pk_dp)
+    m15_sig = False
+    m15_vip = False
+    m15_pick = ice_fb_pick
+    m15_code = "ICE_HOLD"
+    m15_fa = f"بدون احراز قفل هاکی DEG1=88 • کفه یخ: {ice_fb_pick} ({ph_ice if ice_fb_pick == h else round(100.0 - ph_ice, 1)}%)"
+
+    dia_m = fm["modes"]["diamond"]
+    if dia_m["sig"]:
+        ish_d = (tpk_15 == h)
+        p_ice_d = ph_ice if ish_d else round(100.0 - ph_ice, 1)
+        if p_ice_d >= 52.0 and not dual_water_13:
+            m15_sig = True
+            m15_vip = True
+            m15_pick = tpk_15
+            m15_code = "ICE_DIAMOND"
+            m15_fa = f"الماس دو موتور هاکی (T∩P • DEG1=88) + سپر یخ ({p_ice_d:.1f}%)"
+
+    if not m15_sig:
+        cand_15 = None
+        from_dp_15 = False
+        if dp_m["sig"]:
+            cand_15 = pk_dp
+            from_dp_15 = True
+        elif not (tu_15 and pu_15 and tpk_15 != ppk_15):
+            cand_15 = tpk_15 if (tu_15 and p_sup_t15) else (ppk_15 if (pu_15 and t_sup_p15) else None)
+
+        if cand_15:
+            ish_15 = (cand_15 == h)
+            sgn_15 = 1 if ish_15 else -1
+            pel_15 = hel_ice if ish_15 else ael_ice
+            oel_15 = ael_ice if ish_15 else hel_ice
+            p_ice_15 = ph_ice if ish_15 else round(100.0 - ph_ice, 1)
+            pb2b_15 = hb2b_ice if ish_15 else ab2b_ice
+            ob2b_15 = ab2b_ice if ish_15 else hb2b_ice
+            p_dom_15 = h_dom13 if ish_15 else a_dom13
+            astro_ok_15 = from_dp_15 or ((f30_t15 + f30_p15) * sgn_15 >= 0)
+            geo_elem_vote_15 = (
+                g1_win == cand_15
+                or cold0_win == cand_15
+                or gf_win == cand_15
+                or norm_team(m14_pick) == cand_15
+            )
+            if pel_15 in ("WATER", "EARTH"):
+                m15_code = "ICE_YIN_TRAP_HOLD"
+                m15_fa = f"مهار تله قطب سرد هاکی ({pel_15} برابر {oel_15}) • خروج از سیگنال"
+            elif p_dom_13_tie := (p_dom_15 == "TIE" or dual_water_13):
+                m15_code = "ICE_ELEM_TIE_HOLD"
+                m15_fa = "مهار تله برابری المنت ۱۳ موجودیت (TIE / ۲×WATER)"
+            elif pb2b_15 and not ob2b_15 and p_ice_15 < 63.0:
+                m15_code = "ICE_B2B_FATIGUE_HOLD"
+                m15_fa = f"مهار تله خستگی Back-to-Back هاکی ({cand_15} • {p_ice_15:.1f}%)"
+            elif p_ice_15 < (58.0 if ish_15 else 60.0):
+                m15_code = "ICE_PROB_HOLD"
+                m15_fa = f"زیر حد نصاب احتمال برد پیتاگورین هاکی ({p_ice_15:.1f}% < {'58%' if ish_15 else '60% میهمان'})"
+            elif astro_ok_15 and (from_dp_15 or geo_elem_vote_15):
+                m15_sig = True
+                m15_pick = cand_15
+                m15_vip = bool(
+                    (p_ice_15 >= 63.0 and tpk_15 == ppk_15)
+                    or ((f30_t15 + f30_p15) * sgn_15 > 0 and g1_win == cand_15)
+                )
+                m15_code = "ICE_YANG_TWIN_LOCK" if from_dp_15 else "ICE_UNION_ASTRO_LOCK"
+                m15_fa = (
+                    f"ابرقفل هاکی DEG1=88: همزاد + سپر {pel_15} ({p_ice_15:.1f}%) + ۱ گلر و ۷ اسکیت‌باز"
+                    if from_dp_15
+                    else f"قفل اتحاد همزاد + نجوم F30 + سپر {pel_15} ({p_ice_15:.1f}%)"
+                )
+
+    fm["modes"]["nhl_ice_ultralock"] = {"sig": m15_sig, "vip": m15_vip, "pick": m15_pick}
+
+    # Mode 16 (`nhl_anti_nobet`): Mode 15 Core + Yang Union Release + Rested Contender vs Yin Trap
+    m16_sig = False
+    m16_vip = False
+    m16_pick = m15_pick
+    m16_kind = "ICE_HOLD_NEUTRAL"
+    m16_fa = m15_fa
+
+    if m15_sig:
+        m16_sig = True
+        m16_vip = m15_vip
+        m16_pick = m15_pick
+        m16_kind = "M15_CORE"
+        m16_fa = f"سیگنال اصلی حالت ۱۵ تایید شد ({m15_fa})"
+    elif not dual_water_13:
+        if not (tu_15 and pu_15 and tpk_15 != ppk_15):
+            uk_16 = tpk_15 if (tu_15 and p_sup_t15) else (ppk_15 if (pu_15 and t_sup_p15) else None)
+            if uk_16:
+                ish_16 = (uk_16 == h)
+                pel_16 = hel_ice if ish_16 else ael_ice
+                p_ice_16 = ph_ice if ish_16 else round(100.0 - ph_ice, 1)
+                pb2b_16 = hb2b_ice if ish_16 else ab2b_ice
+                ob2b_16 = ab2b_ice if ish_16 else hb2b_ice
+                p_dom_16 = h_dom13 if ish_16 else a_dom13
+                if (
+                    pel_16 in ("FIRE", "AIR")
+                    and p_dom_16 != "TIE"
+                    and not (pb2b_16 and not ob2b_16 and p_ice_16 < 62.0)
+                    and p_ice_16 >= (56.0 if ish_16 else 60.0)
+                ):
+                    m16_sig = True
+                    m16_vip = bool(p_ice_16 >= 64.0 and tpk_15 == ppk_15)
+                    m16_pick = uk_16
+                    m16_kind = "YANG_UNION_RELEASE"
+                    m16_fa = f"آزادسازی ضد NO-BET هاکی (گروه ۱): اتحاد همزاد + سپر {pel_16} ({p_ice_16:.1f}%)"
+
+        if not m16_sig:
+            cand_16 = h if ph_ice >= 65.0 else (a if (100.0 - ph_ice) >= 65.0 else None)
+            if cand_16:
+                ish_c16 = (cand_16 == h)
+                sgn_c16 = 1 if ish_c16 else -1
+                pel_c16 = hel_ice if ish_c16 else ael_ice
+                oel_c16 = ael_ice if ish_c16 else hel_ice
+                p_ice_c16 = ph_ice if ish_c16 else round(100.0 - ph_ice, 1)
+                pb2b_c16 = hb2b_ice if ish_c16 else ab2b_ice
+                ob2b_c16 = ab2b_ice if ish_c16 else hb2b_ice
+                p_dom_c16 = h_dom13 if ish_c16 else a_dom13
+                if (
+                    pel_c16 in ("FIRE", "AIR")
+                    and oel_c16 in ("WATER", "EARTH")
+                    and p_dom_c16 != "TIE"
+                    and not (pb2b_c16 and not ob2b_c16)
+                    and tpk_15 == cand_16
+                    and ppk_15 == cand_16
+                    and (f30_t15 + f30_p15) * sgn_c16 >= 0
+                ):
+                    m16_sig = True
+                    m16_vip = bool(p_ice_c16 >= 68.0)
+                    m16_pick = cand_16
+                    m16_kind = "CONTENDER_YIN_MISMATCH"
+                    m16_fa = f"آزادسازی ضد NO-BET هاکی (گروه ۲): مدعی {pel_c16} برابر تله {oel_c16} + توافق دو همزاد ({p_ice_c16:.1f}%)"
+
+    fm["modes"]["nhl_anti_nobet"] = {
+        "sig": m16_sig, "vip": m16_vip, "pick": m16_pick,
+        "kind": m16_kind, "reason_fa": m16_fa,
+    }
+    fm["nhl_ice"] = {
+        "ph_ice": ph_ice,
+        "hel_ice": hel_ice,
+        "ael_ice": ael_ice,
+        "hrk_ice": hrk_ice,
+        "ark_ice": ark_ice,
+        "hb2b": hb2b_ice,
+        "ab2b": ab2b_ice,
+        "h_dom": h_dom13,
+        "a_dom": a_dom13,
+        "dual_water": dual_water_13,
+        "m15_code": m15_code,
+        "m15_reason_fa": m15_fa,
+        "m16_kind": m16_kind,
+        "m16_reason_fa": m16_fa,
+    }
+
     in_ov_flag = bool(fm.get("in_auth_overlap", True))
-    g["sys_win"] = m12_pick
-    g["pw"] = m12_pick
-    g["fpw"] = m12_pick if (m12_sig and in_ov_flag) else ""
+    g["sys_win"] = m15_pick
+    g["pw"] = m15_pick
+    g["fpw"] = m15_pick if (m15_sig and in_ov_flag) else ""
     if g.get("done") and g.get("aw") and g.get("aw") != "PENDING":
         aw_norm = norm_team(g["aw"])
-        g["st"] = "WIN" if norm_team(m12_pick) == aw_norm else "LOSS"
-        g["fst"] = g["st"] if (m12_sig and in_ov_flag) else ""
+        g["st"] = "WIN" if norm_team(m15_pick) == aw_norm else "LOSS"
+        g["fst"] = g["st"] if (m15_sig and in_ov_flag) else ""
     else:
         g["st"] = "PENDING"
         g["fst"] = ""
@@ -1099,9 +1373,11 @@ def recompute_all_fusion_modes(g):
 def recompute_summary(games):
     done_auth = [g for g in games if g.get("done") and (g.get("fusion_meta") or {}).get("in_auth_overlap") and g.get("aw")]
     MODE_DEFS = [
-        ("total_elem_12",    "حالت ۱۴ (موتور قطبیت کامل المنت کل: ۱۲ بازیکن لباس‌پوشیده + تیم)"),
+        ("nhl_ice_ultralock","حالت ۱۵ (ابرقفل اختصاصی هاکی NHL • DEG1=88 + سپر FIRE/AIR + ۱ گلر و ۷ اسکیت‌باز): پیش‌فرض"),
+        ("nhl_anti_nobet",   "حالت ۱۶ (ضد NO-BET هوشمند اختصاصی هاکی NHL • حالت ۱۵ + اتحاد یانگ و شکار تله سرد)"),
+        ("total_elem_12",    "حالت ۱۴ (موتور قطبیت کامل المنت کل: ۱ گلر + ۱۱ اسکیت‌باز + تیم)"),
         ("anti_nobet_smart", "حالت ۱۳ (ضد NO-BET هوشمند: حالت ۱۲ + آزادسازی مستقیم + چرخش عکس)"),
-        ("tri_gf_ultralock", "حالت ۱۲ (ابرقفل ۳ عددی تلفیقی + ضدحذف): پیش‌فرض جدید"),
+        ("tri_gf_ultralock", "حالت ۱۲ (ابرقفل ۳ عددی تلفیقی + ضدحذف v68)"),
         ("tri_gf_routed",    "حالت ۱۱ (موتور مستقل ۳ عددی + مسیریاب ضدحذف): بدون همزادیاب"),
         ("gf_fin_pure",      "حالت ۱۰ (موتور خالص GF-FIN): عدد کمتر یا منفی‌تر برنده — بدون هیچ قفل و شرط"),
         ("pos_inv_lock",     "حالت ۹ (قفل جامع v5 + داور GF-FIN): حالت ۷ + معکوس دو-مثبت (+,+)"),
@@ -1116,6 +1392,7 @@ def recompute_summary(games):
     ]
     out = {}
     for mk, label in MODE_DEFS:
+        use_ice_l5 = mk in ("nhl_ice_ultralock", "nhl_anti_nobet")
         def sub_metric(arr, use_vip=False):
             sel = [g for g in arr if g["fusion_meta"]["modes"][mk]["vip" if use_vip else "sig"]]
             w = sum(1 for g in sel if norm_team(g["fusion_meta"]["modes"][mk]["pick"]) == norm_team(g["aw"]))
@@ -1123,7 +1400,10 @@ def recompute_summary(games):
             l5_sum = 0.0
             for g in sel:
                 pk = norm_team(g["fusion_meta"]["modes"][mk]["pick"])
-                l5h = float((g.get("wtp") or {}).get("l5h", 50.0))
+                if use_ice_l5:
+                    l5h = float((g.get("ice_wtp") or {}).get("ph_ice", 53.8))
+                else:
+                    l5h = float((g.get("wtp") or {}).get("l5h", 50.0))
                 l5_sum += (l5h if pk == norm_team(g["h"]) else (100.0 - l5h))
             avg_l5 = l5_sum / max(1, n)
             pct = round(100.0 * w / max(1, n), 1)
@@ -1476,10 +1756,13 @@ def main():
                 return True
         return False
 
+    prior_gp_2526 = {norm_team(k): dict(v) for k, v in (rt.get("prior_gp_2526") or {}).items()}
+
     def _select_active_nhl(tname, d_iso, top_k=8, max_goalies=1):
         prior_games = [plist for (db, plist) in team_box_2627.get(tname, []) if db < d_iso]
         cur_roster = live_roster_pids.get(tname, {})
         base_mpg = base_mpg_2526.get(tname, {})
+        pr_gps = prior_gp_2526.get(tname, {})
         recent = prior_games[-10:]
         min_sums = defaultdict(float); gp_cnts = defaultdict(int); st_cnts = defaultdict(int)
         for plist in recent:
@@ -1489,7 +1772,8 @@ def main():
                 gp_cnts[pid] += 1
                 if pr.get("starter"):
                     st_cnts[pid] += 1
-        cands = []
+        goalie_cands = []
+        skater_cands = []
         all_pids = set(min_sums.keys()) | set(cur_roster.keys())
         for pid in all_pids:
             if pid not in p_static:
@@ -1501,23 +1785,17 @@ def main():
             pos = str(p_static[pid].get("pos") or cur_roster.get(pid, {}).get("pos") or "")
             g_c = gp_cnts.get(pid, 0)
             obs_pg = (min_sums[pid] / g_c) if g_c > 0 else 0.0
-            prior_m = float(base_mpg.get(pid, 55.0 if pos == "G" else 14.0))
+            is_g = pc.is_nhl_goalie(pos, obs_pg)
+            prior_m = float(base_mpg.get(pid, 56.0 if is_g else 14.0))
+            pr_gp = int(pr_gps.get(pid, 0))
             blend_toi = (g_c * obs_pg + 2.0 * prior_m) / (g_c + 2.0) if g_c > 0 else (prior_m * 0.4)
-            if blend_toi >= 6.0:
-                is_st = st_cnts.get(pid, 0) >= max(1, g_c // 2)
-                cands.append((pid, round(blend_toi, 1), is_st, pos))
-        cands.sort(key=lambda x: (x[2], x[1]), reverse=True)
-        chosen = []
-        g_used = 0
-        for pid, toi_v, is_st, pos in cands:
-            if pos == "G":
-                if g_used >= max_goalies:
-                    continue
-                g_used += 1
-            chosen.append((pid, toi_v, is_st))
-            if len(chosen) >= top_k:
-                break
-        return chosen
+            if is_g:
+                if g_c > 0 or pr_gp >= 10 or not prior_games:
+                    goalie_cands.append((pid, blend_toi, st_cnts.get(pid, 0), min_sums.get(pid, 0.0), pr_gp))
+            else:
+                if blend_toi >= 6.0:
+                    skater_cands.append((pid, blend_toi, min_sums.get(pid, 0.0), st_cnts.get(pid, 0)))
+        return pc.select_nhl_1g_plus_skaters(goalie_cands, skater_cands, top_k=top_k)
 
     def get_pending_lineup_8(tname, d_iso):
         return _select_active_nhl(tname, d_iso, top_k=8, max_goalies=1)
@@ -1570,6 +1848,7 @@ def main():
             cut_pairs.add((g["d"], s_g))
 
     all_snaps = nls.build_all_snapshots(snap_hist, cut_pairs) if cut_pairs else {}
+    all_ice_snaps = build_nhl_ice_snapshots(snap_hist, cut_pairs) if cut_pairs else {}
 
     checked_games = 0
     changed_lineups = 0
@@ -1583,7 +1862,7 @@ def main():
         h = norm_team(g["h"]); a = norm_team(g["a"])
         old_hp = [str(p.get("fn", "")) for p in (g.get("h_players") or [])]
         old_ap = [str(p.get("fn", "")) for p in (g.get("a_players") or [])]
-        old_m12 = dict((g.get("fusion_meta") or {}).get("modes", {}).get("tri_gf_ultralock") or {})
+        old_m15 = dict((g.get("fusion_meta") or {}).get("modes", {}).get("nhl_ice_ultralock") or {})
 
         y, m, d = map(int, g["d"].split("-"))
         dt_obj = datetime.date(y, m, d)
@@ -1599,6 +1878,8 @@ def main():
             hfav_tm_cur = (norm_team(g["fusion_meta"]["team"]["pick"]) == h)
             g["wtp"] = nls.make_wtp_obj(snap_wk, mon_iso, h, a, hfav_tm_cur)
             g["wtp_day"] = nls.make_wtp_obj(snap_dy, yest, h, a, hfav_tm_cur)
+            if (g["d"], s_g) in all_ice_snaps:
+                g["ice_wtp"] = make_ice_wtp_obj(all_ice_snaps[(g["d"], s_g)], h, a, g["d"], sched_all)
         else:
             snap_dy = None; snap_wk = None
 
@@ -1673,17 +1954,26 @@ def main():
             t3 = pb2b and f30_o < 12 and ((not hfav) or (not nat))
             t4 = (not nat) and fav_v3 < 3 and fav_v4 < 3 and f30_o < 12
             t5 = (fav_v4 == 0) or (c4_vote_opp and f30_o < 12) or (is_playoff and (ag5_p < 4 or not nat))
-            p_guard = bool(bcombo and not (t1 or t2 or t3 or t4 or t5))
+            htrap_p = bool(t1 or t2 or t3 or t4 or t5)
+            p_guard = bool(bcombo and not htrap_p)
+            c4_hfav = c4["hw"] > c4["aw"]
+            c4_resc = (
+                (not bcombo) and 5 <= (c4["hw"] + c4["aw"]) <= 7 and c4["nat"] and c4["pct"] >= 83
+                and c4_hfav == hfav and f30_o >= 10 and c4["ds"] * sgn >= 2 and not is_playoff and not pb2b
+            )
+            min_o3 = min(ds4_o[:3])
+            p_resc = bool(((not bcombo) and v71 and fav_v4 >= 3 and min_o3 >= 1 and not htrap_p) or c4_resc)
             l5h_val = float((g.get("wtp") or {}).get("l5h", 50.0))
             l5_p_pct = l5h_val if hfav else (100.0 - l5h_val)
             mel = nls.matchup_elem(l5_p_pct)
             p_sig = bool(p_guard and mel != "EARTH")
+            p_union = bool((p_guard or p_resc) and mel != "EARTH")
             p_vip = bool(p_sig and (mel == "FIRE" or (nat and fav_v4 == 4 and min_o4 >= 2)))
 
             fm = g["fusion_meta"]
             fm["player"] = {
                 "pick": ppk, "votes": f"{hw}H-{aw_v}A", "pct": f"{pct_int}%",
-                "f30": f30_p, "ch": f"{vh4}H-{va4}A", "sig": p_sig, "vip": p_vip
+                "f30": f30_p, "ch": f"{vh4}H-{va4}A", "sig": p_sig, "vip": p_vip, "union": p_union,
             }
             tm_obj = fm["team"]
             tpk = norm_team(tm_obj["pick"])
@@ -1744,7 +2034,7 @@ def main():
 
             new_hp = [str(p.get("fn", "")) for p in (g.get("h_players") or [])]
             new_ap = [str(p.get("fn", "")) for p in (g.get("a_players") or [])]
-            new_m12 = dict((g.get("fusion_meta") or {}).get("modes", {}).get("tri_gf_ultralock") or {})
+            new_m15 = dict((g.get("fusion_meta") or {}).get("modes", {}).get("nhl_ice_ultralock") or {})
 
             if set(old_hp) != set(new_hp) or set(old_ap) != set(new_ap):
                 changed_lineups += 1
@@ -1756,7 +2046,7 @@ def main():
                             "n": g["n"], "matchup": f"{g['ac']} @ {g['hc']}",
                             "removed": rem, "added": add,
                         })
-            if old_m12.get("sig") != new_m12.get("sig") or old_m12.get("pick") != new_m12.get("pick"):
+            if old_m15.get("sig") != new_m15.get("sig") or old_m15.get("pick") != new_m15.get("pick"):
                 changed_signals += 1
 
     if updated_scores > 0 or "summary" not in doc:
@@ -1774,6 +2064,11 @@ def main():
         json.dump({"games": fast_games, "summary": doc["summary"], "fusion_modes_summary": doc["summary"]}, open(tmp_f, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
         os.replace(tmp_f, fast_path)
 
+        sum_path = os.path.join(os.path.dirname(args.master_path), "fusion_modes_summary.json")
+        tmp_s = sum_path + ".tmp"
+        json.dump(doc["summary"], open(tmp_s, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+        os.replace(tmp_s, sum_path)
+
         extra_out = {}
         for dy, arr in p_by_day.items():
             ex = [[x["d"], x["mg"], x["h12"], x["h_fin"], x["h_dyn"], x["h_tab"]] for x in arr if x["d"] >= "2026-11-15"]
@@ -1783,7 +2078,9 @@ def main():
             "team_tz_map": team_tz_map,
             "live_rosters": base_live_rosters,
             "base_mpg_2526": base_mpg_2526,
+            "prior_gp_2526": prior_gp_2526,
             "team_box_2627": {tn: arr[-15:] for tn, arr in team_box_2627.items()},
+            "p_static": p_static,
             "player_static": p_static,
             "extra_p_by_day": extra_out,
         }
@@ -1791,9 +2088,9 @@ def main():
         json.dump(rt_out, open(tmp_rt, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
         os.replace(tmp_rt, args.runtime_path)
 
-    active_m12 = [
-        {"n": g["n"], "pick": g["fusion_meta"]["modes"]["tri_gf_ultralock"]["pick"], "vip": g["fusion_meta"]["modes"]["tri_gf_ultralock"]["vip"]}
-        for g in games if g["d"] == t_iso and not g.get("done") and g["fusion_meta"]["modes"]["tri_gf_ultralock"]["sig"]
+    active_m15 = [
+        {"n": g["n"], "pick": g["fusion_meta"]["modes"]["nhl_ice_ultralock"]["pick"], "vip": g["fusion_meta"]["modes"]["nhl_ice_ultralock"]["vip"]}
+        for g in games if g["d"] == t_iso and not g.get("done") and g["fusion_meta"]["modes"]["nhl_ice_ultralock"]["sig"]
     ]
     total_blocked = sum(len(v) for v in live_unavail_by_team.values())
 
@@ -1806,9 +2103,10 @@ def main():
         "changedSignals": changed_signals,
         "totalBlockedPlayers": total_blocked,
         "lineupDiffs": lineup_diffs,
-        "activeM12": active_m12,
-        "s2627": doc["summary"]["tri_gf_ultralock"]["s2627"],
-        "holdout": doc["summary"]["tri_gf_ultralock"]["holdout_2527"],
+        "activeM15": active_m15,
+        "activeM12": active_m15,
+        "s2627": doc["summary"]["nhl_ice_ultralock"]["s2627"],
+        "holdout": doc["summary"]["nhl_ice_ultralock"]["holdout_2527"],
     }
     print("__NHL_ROSTER_SYNC__ " + json.dumps(payload, ensure_ascii=False))
     print("__NBA_ROSTER_SYNC__ " + json.dumps(payload, ensure_ascii=False))

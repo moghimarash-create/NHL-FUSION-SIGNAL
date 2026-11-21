@@ -13,20 +13,22 @@ const ENV_INPUT_SHEET_ID = String(import.meta.env.VITE_NHL_FUSION_INPUT_SHEET_ID
 const ENV_CALC_SHEET_ID = String(import.meta.env.VITE_NHL_FUSION_CALC_SHEET_ID || "").trim();
 
 const MODE_KEYS: FusionModeKey[] = [
-  "tri_gf_ultralock",
-  "anti_nobet_smart",
-  "total_elem_12",
-  "tri_gf_routed",
-  "gf_fin_pure",
-  "pos_inv_lock",
-  "earth_neg_lock",
-  "safe_dl_core",
-  "double_pwr_lock",
+  "nhl_ice_ultralock",
+  "nhl_anti_nobet",
   "geo_1xxx_lock",
   "dual_pillar",
-  "vip_cross",
-  "astro_lock",
   "diamond",
+  "double_pwr_lock",
+  "earth_neg_lock",
+  "astro_lock",
+  "vip_cross",
+  "tri_gf_ultralock",
+  "total_elem_12",
+  "anti_nobet_smart",
+  "safe_dl_core",
+  "tri_gf_routed",
+  "pos_inv_lock",
+  "gf_fin_pure",
 ];
 
 type ModeBenchInfo = {
@@ -41,155 +43,175 @@ type ModeBenchInfo = {
 };
 
 const DEFAULT_FUSION_MODES: Record<FusionModeKey, ModeBenchInfo> = {
-  tri_gf_ultralock: {
-    shortFa: "حالت ۱۲ (ابرقفل ۳ عددی تلفیقی + قطب سرد ۰xxx + ۲ قفل ایمنی v68): پیش‌فرض",
-    formulaEn: "Mode_9_Ultra(GF-FIN, Cnt>=1) ∪ ColdAnchor_Keep(0xxx<=-4) ∪ Bipolar_0011(Twin) ∪ S3_SignSplit ∪ Zero1xxx_Opp ∪ EARTH_Flip \\ (DualEarth_Hold ∪ TwinVs3of3_Hold)",
-    holdPct: "54.5%",
-    holdRec: "146/268",
-    s2526: "55.3% (125/226)",
-    s2627: "50.0% (21/42)",
-    last50: "54.0% (27/50)",
-    edge: "All 57.0% (285/500)",
-  },
-  anti_nobet_smart: {
-    shortFa: "حالت ۱۳ (ضد NO-BET هوشمند: حالت ۱۲ + آزادسازی مستقیم گروه ۱ + چرخش عکس گروه ۲)",
-    formulaEn: "Mode_12_Core ∪ Direct_Release(M11 & NonEARTH & Log5>=75%) ∪ Opposite_Flip(!M11 & NonEARTH & (DP_Opp | RawFB_OppLog5>=60%))",
-    holdPct: "56.5%",
-    holdRec: "454/803",
-    s2526: "55.3% (352/637)",
-    s2627: "61.4% (102/166)",
+  nhl_ice_ultralock: {
+    shortFa: "حالت ۱۵ (ابرقفل اختصاصی هاکی NHL • DEG1=88 + سپر FIRE/AIR + ۱ گلر و ۷ اسکیت‌باز): پیش‌فرض",
+    formulaEn: "NHL_Ice_UltraLock(DEG1=88, 1G+7S_TOI, Pyth_2.05) = Diamond ∪ [(DualPillar | TwinUnion_Astro) & YangShield(FIRE|AIR) & Dom!=TIE & !2xWATER & Rest/Home_Guard]",
+    holdPct: "65.3%",
+    holdRec: "49/75",
+    s2526: "64.5% (40/62)",
+    s2627: "69.2% (9/13)",
     last50: "68.0% (34/50)",
-    edge: "VIP 58.9% (626/1063)",
+    edge: "All 71.2% (104/146)",
   },
-  total_elem_12: {
-    shortFa: "حالت ۱۴ (قطبیت المنت کل ۱۲ بازیکن+تیم + داور رتبه‌بندی و امتیازدهی وزنی ۶ باکس v82)",
-    formulaEn: "13_Entities + DomElem[F,A,W,E] + PureLog5 \\ (2xWATER ∪ Bipolar<75% ∪ AwayWarm<0 -> Flip_Opp) ∪ OppFlip(12P|M11)",
-    holdPct: "55.8%",
-    holdRec: "309/554",
-    s2526: "54.1% (236/436)",
-    s2627: "61.9% (73/118)",
-    last50: "62.0% (31/50)",
-    edge: "VIP 59.5% (515/866)",
-  },
-  tri_gf_routed: {
-    shortFa: "حالت ۱۱ (موتور مستقل ۳ عددی + قطب سرد ۰xxx + ضدحذف): بدون همزاد",
-    formulaEn: "3-Num [Σ(1xxx), Σ(0xxx/0011), Σ(8), Σ(GF), Σ(3)] + Anti-Drop: ColdAnchor_Keep ∪ S3_SignSplit ∪ Zero1xxx_Opp ∪ EARTH_Flip ∪ PosInv",
-    holdPct: "54.4%",
-    holdRec: "514/944",
-    s2526: "52.9% (397/751)",
-    s2627: "60.6% (117/193)",
-    last50: "64.0% (32/50)",
-    edge: "VIP 58.9% (657/1116)",
-  },
-  gf_fin_pure: {
-    shortFa: "حالت ۱۰ (موتور خالص GF-FIN): عدد کمتر یا منفی‌تر برنده • بدون قفل و شرط",
-    formulaEn: "Pick = argmin(Σ GF-FIN_8_Players) where GF-FIN = (8*s1 + 4*s2 + 2*s3 + 1*s4)/10 • Zero Locks / Zero Filters",
-    holdPct: "50.8%",
-    holdRec: "887/1745",
-    s2526: "50.6% (703/1388)",
-    s2627: "51.5% (184/357)",
-    last50: "54.0% (27/50)",
-    edge: "+0.3pp",
-  },
-  pos_inv_lock: {
-    shortFa: "حالت ۹ (قفل جامع v5 + داور GF-FIN)",
-    formulaEn: "Mode_7_GF(Cnt>=1) ∪ VIP_SafeDL ∪ [Both_1xxx>0 -> Polarity_Inversion] ∪ [Div(1xxx,Σ8) & |ΔGF-FIN|>=6 -> 2/3_Referee]",
-    holdPct: "52.6%",
-    holdRec: "112/213",
-    s2526: "52.8% (94/178)",
-    s2627: "51.4% (18/35)",
-    last50: "56.0% (28/50)",
-    edge: "VIP 56.3% (139/247)",
-  },
-  earth_neg_lock: {
-    shortFa: "حالت ۷ (قفل ایمن منفی + داور GF-FIN)",
-    formulaEn: "Dual_Pillar & !(EARTH vs Stronger) & !PosInv_Trap & NegAnchor & (Double_Lock | (Cnt>=1 & |ΔGF-FIN|>=6 & 2/3_Maj))",
-    holdPct: "62.2%",
-    holdRec: "23/37",
-    s2526: "55.6% (15/27)",
-    s2627: "80.0% (8/10)",
-    last50: "62.2% (23/37)",
-    edge: "All 64.9% (50/77)",
-  },
-  safe_dl_core: {
-    shortFa: "حالت ۸ (قفل مستقل ایمن + داور GF-FIN)",
-    formulaEn: "Mode_7_GF(Cnt>=1) ∪ VIP_SafeDL ∪ ((Safe_DL | (Cnt>=1 & |ΔGF-FIN|>=6 & 2/3_Maj)) & NoEARTH & NegAnchor & Log5>=60% & T=P)",
-    holdPct: "51.6%",
-    holdRec: "49/95",
-    s2526: "48.1% (37/77)",
-    s2627: "66.7% (12/18)",
-    last50: "64.0% (32/50)",
-    edge: "All 56.2% (99/176)",
-  },
-  double_pwr_lock: {
-    shortFa: "حالت ۶ (قفل دوگانه ۱xxx + Σ8): بدون فیلتر لنگر منفی",
-    formulaEn: "Dual_Pillar AND Σ Pwr(1xxx, Pick) < Opp AND Σ Pwr(All 8, Pick) < Opp",
-    holdPct: "61.5%",
-    holdRec: "24/39",
-    s2526: "57.1% (16/28)",
-    s2627: "72.7% (8/11)",
-    last50: "61.5% (24/39)",
-    edge: "+2.2pp",
+  nhl_anti_nobet: {
+    shortFa: "حالت ۱۶ (ضد NO-BET هوشمند هاکی NHL: حالت ۱۵ + اتحاد یانگ و شکار تله سرد WATER/EARTH)",
+    formulaEn: "Mode_15_Core ∪ YangUnion_Release(FIRE|AIR, Dom!=TIE) ∪ Contender_YinMismatch(FIRE|AIR vs WATER|EARTH, Pyth>=65%, T==P, F30>=0)",
+    holdPct: "60.3%",
+    holdRec: "82/136",
+    s2526: "57.4% (58/101)",
+    s2627: "68.6% (24/35)",
+    last50: "70.0% (35/50)",
+    edge: "VIP 65.7% (113/172)",
   },
   geo_1xxx_lock: {
-    shortFa: "حالت ۵ (فیلتر رمل ۱xxx): تلفیق دو-ستونی + برتری منفی ۱xxx",
-    formulaEn: "Dual_Pillar AND Σ Pwr(GEO-FIN = 1xxx, Pick) < Σ Pwr(GEO-FIN = 1xxx, Opp)",
-    holdPct: "62.7%",
-    holdRec: "37/59",
-    s2526: "59.1% (26/44)",
-    s2627: "73.3% (11/15)",
-    last50: "66.0% (33/50)",
-    edge: "+1.4pp",
+    shortFa: "حالت ۵ (فیلتر رمل ۱xxx • ۱ گلر + ۷ اسکیت‌باز): تلفیق دو-ستونی + برتری منفی ۱xxx",
+    formulaEn: "Dual_Pillar(1G+7S) AND Σ Pwr(GEO-FIN = 1xxx, Pick) < Σ Pwr(GEO-FIN = 1xxx, Opp)",
+    holdPct: "72.2%",
+    holdRec: "52/72",
+    s2526: "70.9% (39/55)",
+    s2627: "76.5% (13/17)",
+    last50: "72.0% (36/50)",
+    edge: "+8.7pp",
   },
   dual_pillar: {
-    shortFa: "حالت ۱ (جامع): تلفیق دو-ستونی تیم + بازیکن",
+    shortFa: "حالت ۱ (جامع • ۱ گلر + ۷ اسکیت‌باز): تلفیق دو-ستونی تیم + بازیکن",
     formulaEn: "(T.f1_wtp & (Twin_P == Pick | F30_P > 0)) ∪ (P_C.f1_wtp & (Twin_T == Pick | F30_T > 0))",
-    holdPct: "63.3%",
-    holdRec: "76/120",
-    s2526: "64.5% (60/93)",
-    s2627: "59.3% (16/27)",
-    last50: "74.0% (37/50)",
-    edge: "All 64.3% (157/244)",
+    holdPct: "65.4%",
+    holdRec: "85/130",
+    s2526: "63.8% (67/105)",
+    s2627: "72.0% (18/25)",
+    last50: "72.0% (36/50)",
+    edge: "+0.4pp",
   },
-  vip_cross: {
-    shortFa: "حالت ۲ (شکارچی طلایی): VIP با تأیید متقابل دو موتور",
-    formulaEn: "(T.vip & (Twin_P == Pick | F30_P > 0)) ∪ (P_C.vip & (Twin_T == Pick | F30_T > 0))",
-    holdPct: "58.5%",
-    holdRec: "38/65",
-    s2526: "54.2% (26/48)",
-    s2627: "70.6% (12/17)",
-    last50: "58.0% (29/50)",
-    edge: "VIP 81.2% (13/16)",
+  diamond: {
+    shortFa: "حالت ۴ (قفل الماس T ∩ P): توافق هم‌زمان سیگنال نهایی دو موتور",
+    formulaEn: "T.f1_wtp AND P_C.f1_wtp (DEG1=88 • 28 GEMINI • 1G+7S Dual-Engine Intersection)",
+    holdPct: "80.0%",
+    holdRec: "4/5",
+    s2526: "80.0% (4/5)",
+    s2627: "90.0% (9/10 All)",
+    last50: "90.0% (9/10 All)",
+    edge: "+12.7pp",
+  },
+  double_pwr_lock: {
+    shortFa: "حالت ۶ (قفل دوگانه ۱xxx + Σ8 • ۱ گلر + ۷ اسکیت‌باز): بدون فیلتر لنگر منفی",
+    formulaEn: "Dual_Pillar(1G+7S) AND Σ Pwr(1xxx, Pick) < Opp AND Σ Pwr(All 8, Pick) < Opp",
+    holdPct: "67.4%",
+    holdRec: "29/43",
+    s2526: "63.3% (19/30)",
+    s2627: "76.9% (10/13)",
+    last50: "67.4% (29/43)",
+    edge: "+3.6pp",
+  },
+  earth_neg_lock: {
+    shortFa: "حالت ۷ (قفل ایمن منفی + داور GF-FIN • ۱ گلر + ۷ اسکیت‌باز)",
+    formulaEn: "Dual_Pillar & !(EARTH vs Stronger) & !PosInv_Trap & NegAnchor & (Double_Lock | (Cnt>=1 & |ΔGF-FIN|>=6 & 2/3_Maj))",
+    holdPct: "64.4%",
+    holdRec: "29/45",
+    s2526: "58.8% (20/34)",
+    s2627: "81.8% (9/11)",
+    last50: "64.4% (29/45)",
+    edge: "All 64.7% (55/85)",
   },
   astro_lock: {
     shortFa: "حالت ۳ (قفل متقابل نجومی): سیگنال یک موتور + F30 مثبت موتور دوم",
     formulaEn: "(T.f1_wtp & F30_P_for > 0) ∪ (P_C.f1_wtp & F30_T_for > 0)",
     holdPct: "63.5%",
-    holdRec: "47/74",
-    s2526: "65.0% (39/60)",
-    s2627: "57.1% (8/14)",
-    last50: "66.0% (33/50)",
-    edge: "All 68.2% (105/154)",
+    holdRec: "54/85",
+    s2526: "63.0% (46/73)",
+    s2627: "66.7% (8/12)",
+    last50: "60.0% (30/50)",
+    edge: "All 66.0% (97/147)",
   },
-  diamond: {
-    shortFa: "حالت ۴ (قفل الماس T ∩ P): توافق هم‌زمان سیگنال نهایی دو موتور",
-    formulaEn: "T.f1_wtp AND P_C.f1_wtp (DEG1=88 • 28 GEMINI • Dual-Engine Intersection)",
-    holdPct: "77.8%",
-    holdRec: "7/9",
-    s2526: "75.0% (6/8)",
-    s2627: "100.0% (1/1)",
-    last50: "81.2% (13/16 All)",
-    edge: "+10.0pp",
+  vip_cross: {
+    shortFa: "حالت ۲ (شکارچی طلایی): VIP با تأیید متقابل دو موتور",
+    formulaEn: "(T.vip & (Twin_P == Pick | F30_P > 0)) ∪ (P_C.vip & (Twin_T == Pick | F30_T > 0))",
+    holdPct: "62.9%",
+    holdRec: "44/70",
+    s2526: "58.9% (33/56)",
+    s2627: "78.6% (11/14)",
+    last50: "60.0% (30/50)",
+    edge: "VIP 90.0% (9/10)",
+  },
+  tri_gf_ultralock: {
+    shortFa: "حالت ۱۲ (ابرقفل ۳ عددی تلفیقی + قطب سرد ۰xxx + ۲ قفل ایمنی v68)",
+    formulaEn: "Mode_9_Ultra(GF-FIN, Cnt>=1) ∪ ColdAnchor_Keep(0xxx<=-4) ∪ Bipolar_0011(Twin) ∪ S3_SignSplit ∪ Zero1xxx_Opp ∪ EARTH_Flip \\ (DualEarth_Hold ∪ TwinVs3of3_Hold)",
+    holdPct: "55.3%",
+    holdRec: "152/275",
+    s2526: "53.9% (123/228)",
+    s2627: "61.7% (29/47)",
+    last50: "64.0% (32/50)",
+    edge: "All 58.6% (286/488)",
+  },
+  total_elem_12: {
+    shortFa: "حالت ۱۴ (قطبیت المنت کل ۱ گلر + ۱۱ اسکیت‌باز + تیم + داور وزنی ۶ باکس v82)",
+    formulaEn: "13_Entities(1G+11S+Team) + DomElem[F,A,W,E] + PureLog5 \\ (2xWATER ∪ Bipolar<75% ∪ AwayWarm<0 -> Flip_Opp) ∪ OppFlip(12P|M11)",
+    holdPct: "56.6%",
+    holdRec: "317/560",
+    s2526: "54.2% (240/443)",
+    s2627: "65.8% (77/117)",
+    last50: "66.0% (33/50)",
+    edge: "VIP 59.0% (511/866)",
+  },
+  anti_nobet_smart: {
+    shortFa: "حالت ۱۳ (ضد NO-BET هوشمند پایه v70: حالت ۱۲ + آزادسازی مستقیم + چرخش عکس)",
+    formulaEn: "Mode_12_Core ∪ Direct_Release(M11 & NonEARTH & Log5>=75%) ∪ Opposite_Flip(!M11 & NonEARTH & (DP_Opp | RawFB_OppLog5>=60%))",
+    holdPct: "56.0%",
+    holdRec: "440/786",
+    s2526: "54.2% (336/620)",
+    s2627: "62.7% (104/166)",
+    last50: "70.0% (35/50)",
+    edge: "VIP 59.7% (632/1059)",
+  },
+  safe_dl_core: {
+    shortFa: "حالت ۸ (قفل مستقل ایمن + داور GF-FIN • ۱ گلر + ۷ اسکیت‌باز)",
+    formulaEn: "Mode_7_GF(Cnt>=1) ∪ VIP_SafeDL ∪ ((Safe_DL | (Cnt>=1 & |ΔGF-FIN|>=6 & 2/3_Maj)) & NoEARTH & NegAnchor & Log5>=60% & T=P)",
+    holdPct: "57.0%",
+    holdRec: "69/121",
+    s2526: "51.1% (47/92)",
+    s2627: "75.9% (22/29)",
+    last50: "72.0% (36/50)",
+    edge: "All 59.0% (124/210)",
+  },
+  tri_gf_routed: {
+    shortFa: "حالت ۱۱ (موتور مستقل ۳ عددی + قطب سرد ۰xxx + ضدحذف): بدون همزاد",
+    formulaEn: "3-Num [Σ(1xxx), Σ(0xxx/0011), Σ(8), Σ(GF), Σ(3)] + Anti-Drop: ColdAnchor_Keep ∪ S3_SignSplit ∪ Zero1xxx_Opp ∪ EARTH_Flip ∪ PosInv",
+    holdPct: "54.0%",
+    holdRec: "509/943",
+    s2526: "52.0% (391/752)",
+    s2627: "61.8% (118/191)",
+    last50: "66.0% (33/50)",
+    edge: "VIP 59.0% (656/1111)",
+  },
+  pos_inv_lock: {
+    shortFa: "حالت ۹ (قفل جامع v5 + داور GF-FIN)",
+    formulaEn: "Mode_7_GF(Cnt>=1) ∪ VIP_SafeDL ∪ [Both_1xxx>0 -> Polarity_Inversion] ∪ [Div(1xxx,Σ8) & |ΔGF-FIN|>=6 -> 2/3_Referee]",
+    holdPct: "50.8%",
+    holdRec: "96/189",
+    s2526: "49.7% (79/159)",
+    s2627: "56.7% (17/30)",
+    last50: "60.0% (30/50)",
+    edge: "VIP 57.5% (131/228)",
+  },
+  gf_fin_pure: {
+    shortFa: "حالت ۱۰ (موتور خالص GF-FIN): عدد کمتر یا منفی‌تر برنده • بدون قفل و شرط",
+    formulaEn: "Pick = argmin(Σ GF-FIN_8_Players) where GF-FIN = (8*s1 + 4*s2 + 2*s3 + 1*s4)/10 • Zero Locks / Zero Filters",
+    holdPct: "52.3%",
+    holdRec: "909/1739",
+    s2526: "52.0% (719/1384)",
+    s2627: "53.5% (190/355)",
+    last50: "52.0% (26/50)",
+    edge: "+1.4pp",
   },
 };
 
 function Home() {
   const [fusionMode, setFusionMode] = useState<FusionModeKey>(() => {
     try {
-      const s = window.localStorage.getItem("nhl_fusion_mode_v82") as FusionModeKey | null;
+      const s = window.localStorage.getItem("nhl_fusion_mode_v83") as FusionModeKey | null;
       if (s && s in DEFAULT_FUSION_MODES) return s;
     } catch {}
-    return "tri_gf_ultralock";
+    return "nhl_ice_ultralock";
   });
   const [twinDbKind, setTwinDbKind] = useState<TwinDbKind>("team");
   const [openBench, setOpenBench] = useState<boolean>(false);
@@ -264,7 +286,7 @@ function Home() {
   const switchFusion = (m: FusionModeKey) => {
     setFusionMode(m);
     try {
-      window.localStorage.setItem("nhl_fusion_mode_v82", m);
+      window.localStorage.setItem("nhl_fusion_mode_v83", m);
     } catch {}
   };
 
@@ -283,10 +305,10 @@ function Home() {
                 className="text-lg md:text-xl font-extrabold tracking-tight text-slate-900"
                 data-testid="text-dashboard-title"
               >
-                داشبورد مستقل موتور تلفیقی NHL-FUSION-SIGNAL (داور رتبه‌بندی و امتیازدهی وزنی ۶ باکس • v82)
+                داشبورد مستقل موتور تلفیقی NHL-FUSION-SIGNAL (ابرقفل اختصاصی هاکی DEG1=88 • ۱ گلر + اسکیت‌بازان • v83)
               </h1>
               <p className="text-slate-600 text-xs leading-snug">
-                DEG1=88 (28 GEMINI) • KXNHLGAME • باکس ۱: چک‌لیست تیک‌دار شاخص‌های هر دو تیم • باکس ۲: حکم نهایی، قفل استفاده‌شده و نتیجه بازی
+                DEG1=88 (28 GEMINI • AIR) • KXNHLGAME • قانون ۱ گلر اصلی + ۷ اسکیت‌باز TOI • باکس ۱: چک‌لیست تیک‌دار • باکس ۲: حکم نهایی و نتیجه بازی
               </p>
             </div>
           </div>
@@ -363,7 +385,7 @@ function Home() {
               onClick={() => setOpenBench((v) => !v)}
               className="px-3 py-1.5 rounded-lg bg-white hover:bg-sky-100 border border-sky-300 text-sky-950 text-xs font-extrabold inline-flex items-center gap-1.5 shadow-2xs"
             >
-              {openBench ? "بستن جدول ۱۴ حالت و راهنمای قفل‌ها" : "جدول بنچمارک ۱۴ حالت و راهنمای قفل‌ها"}
+              {openBench ? "بستن جدول ۱۶ حالت و راهنمای قفل‌ها" : "جدول بنچمارک ۱۶ حالت و راهنمای قفل‌ها"}
               {openBench ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             </button>
           </div>
@@ -416,29 +438,30 @@ function Home() {
                       twinDbKind === "player" ? "bg-indigo-700 text-white" : "text-indigo-900 hover:bg-white"
                     }`}
                   >
-                    ۸ بازیکن+TOI+شماره
+                    ۱ گلر+۷ اسکیت‌باز TOI
                   </button>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-cyan-300 bg-cyan-50/80 p-2.5 text-xs text-slate-800 leading-relaxed">
+                <div className="font-extrabold text-cyan-950 mb-1">
+                  کالیبراسیون اختصاصی هاکی روی یخ در حالت ۱۵ و ۱۶ (DEG1=88 • 28 GEMINI • بدون آینده‌نگری Zero-Lookahead):
+                </div>
+                <div>
+                  ۱) <b>اصلاح ترکیب بازیکنان هاکی (۱ گلر اصلی + اسکیت‌بازان بر اساس TOI)</b>: حذف آلودگی گلر ذخیره در لیست ۸ نفره (<b>حداکثر ۱ گلر شروع‌کننده + ۷ اسکیت‌باز برتر TOI</b>) و لیست ۱۲ نفره (<b>۱ گلر + ۱۱ اسکیت‌باز</b>) • ۲) <b>سپر یانگ هاکی (FIRE + AIR) و مهار تله قطب سرد (WATER + EARTH)</b>: جایگزینی توان بسکتبال با توان پیتاگورین واقعی گل‌های هاکی (<b>exp = 2.05</b>)؛ هم‌سویی با عنصر هوا در <b>DEG1=88</b> • ۳) <b>مهار تله برابری المنت کل (TIE / ۲×WATER)</b>، جریمه خستگی <b>Back-to-Back</b> و آستانه تعویض آخر میزبان (<b>۵۸٪ میزبان / ۶۰٪ میهمان</b>) در کنار حفظ کامل حالت‌های مرجع ۱ تا ۱۴.
                 </div>
               </div>
 
               {fusionMode === "total_elem_12" && (
                 <div className="rounded-lg border border-indigo-200 bg-indigo-50/70 p-2.5 text-xs text-slate-800 leading-relaxed">
                   <div className="font-extrabold text-indigo-950 mb-1">
-                    معماری خالص حالت ۱۴ در v82 (المنت غالب [F-A-W-E] + ۱۲ بازیکن TOI و تیم با DEG1=88 + داور وزنی ۶ باکس):
+                    معماری خالص حالت ۱۴ در v82 (المنت غالب [F-A-W-E] + ۱ گلر و ۱۱ اسکیت‌باز TOI و تیم با DEG1=88 + داور وزنی ۶ باکس):
                   </div>
                   <div>
                     ۱) <b>حذف عنصر ساختگی جدول (تله EARTH)</b> در حالت ۱۴ و جایگزینی با <b>احتمال برد خالص Log5%</b> • ۲) <b>المنت غالب مجموع المنت‌ها [F-A-W-E]</b>: بیشترین عدد در بردار نهایی ۱۲ بازیکن + تیم + تاریخ؛ شناسایی <b>تله دوقلوی آب (۲×WATER)</b> با تیک قرمز ✕، تایید <b>برتری ۳/۴ عناصر</b> (VIP ★) و شکاف <b>WATER/AIR برابر EARTH</b> • ۳) <b>فیلتر ۳ تله خطا + قانون تیم عکس فاقد شرایط</b> (۱۲ بازیکن خالص / قفل ۱۱ / توان ۱۳).
                   </div>
                 </div>
               )}
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-2.5 text-xs text-slate-800 leading-relaxed">
-                <div className="font-extrabold text-emerald-950 mb-1">
-                  منطق ۶ شاخص باکس ۱ در حالت ۱۲ (ابرقفل ۳ عددی تلفیقی + قطب سرد ۰xxx + ۲ قفل ایمنی v68):
-                </div>
-                <div>
-                  ۱) <b>قطب گرم Σ(1xxx)</b> (منفی‌تر برنده؛ بررسی تله دو-مثبت و حبس ۱xxx=0) • ۲) <b>مجموع ۸ بازیکن Σ(8) با وزن TOI</b> • ۳) <b>داور GF-FIN و Σ(3)</b> (اکثریت ۲/۳ و ۳/۳) • ۴) <b>قطب سرد Σ(0xxx) / 0011</b> • ۵) <b>موتور تلفیقی همزاد NHL (T+P • DEG1=88)</b> • ۶) <b>عنصر جدول و Log5</b> (عبور FIRE/AIR/WATER و شناسایی تله EARTH) + <b>۲ قفل ایمنی v68</b> (توقف نبرد دو تیم EARTH و مهار همزاد برابر توافق ۳/۳ اعداد).
-                </div>
-              </div>
 
               <div className="text-xs font-extrabold text-sky-950 flex flex-wrap items-center justify-between gap-2">
                 <span>مقایسه برون‌نمونه‌ای بدون آینده‌نگری (r.d &lt; g.d) روی ۳٬۱۵۰ بازی پایان یافته NHL (۲۰۲۴–۲۰۲۷):</span>
@@ -454,7 +477,7 @@ function Home() {
                     <th className="py-1.5 px-2.5">فصل ۲۰۲۵–۲۶</th>
                     <th className="py-1.5 px-2.5">فصل جاری ۲۰۲۶–۲۷</th>
                     <th className="py-1.5 px-2.5">۵۰ سیگنال اخیر</th>
-                    <th className="py-1.5 px-2.5">حاشیه برتری / VIP</th>
+                    <th className="py-1.5 px-2.5">حاشیه برتری / کل ۲۴–۲۷</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-sky-100">
@@ -490,7 +513,7 @@ function Home() {
 
         <footer className="mt-8 pt-4 border-t border-border/50 text-center">
           <p className="text-xs text-muted-foreground font-mono uppercase tracking-widest">
-            NHL-FUSION-SIGNAL v82 • Dual-Engine Fusion Dashboard (Ranked Weighted 6-Box Referee • DEG1=88 • 28 GEMINI • KXNHLGAME)
+            NHL-FUSION-SIGNAL v83 • Dedicated NHL Ice Super-Lock (1G + 7 Skaters TOI • DEG1=88 • 28 GEMINI • KXNHLGAME)
           </p>
         </footer>
       </div>
