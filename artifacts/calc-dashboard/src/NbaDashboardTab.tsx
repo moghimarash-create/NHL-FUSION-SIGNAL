@@ -2109,7 +2109,30 @@ export default function NbaDashboardTab({
     Boolean(oddsFreqMode === "daily" ? (g.vip_idx3_day ?? g.vip_idx3) : g.vip_idx3);
   const activeUnionOf = (g: NbaGamePred) =>
     Boolean(oddsFreqMode === "daily" ? (g.f1_union_day ?? g.f1_union) : g.f1_union);
-  const [dailyCardFilter, setDailyCardFilter] = useState<"all" | "qualified" | "anti_nobet" | "formula_a" | "formula_b" | "referee6" | "ref_top" | "vip3" | "posev" | "win" | "loss" | "pending">("all");
+  const isNhlEcTrapCard = (g: NbaGamePred) => {
+    const ice = g.fusion_meta?.nhl_ice;
+    return Boolean(ice?.nobet_flipped && String(ice?.nobet_trap_code || "").startsWith("EC"));
+  };
+  const isNhlTrapFlippedCard = (g: NbaGamePred) => {
+    const ice = g.fusion_meta?.nhl_ice;
+    return Boolean(ice?.nobet_flipped || ice?.m15_flipped || ice?.m16_flipped);
+  };
+  const [dailyCardFilter, setDailyCardFilter] = useState<
+    | "all"
+    | "qualified"
+    | "anti_nobet"
+    | "trap_flip"
+    | "ec_flip"
+    | "formula_a"
+    | "formula_b"
+    | "referee6"
+    | "ref_top"
+    | "vip3"
+    | "posev"
+    | "win"
+    | "loss"
+    | "pending"
+  >("all");
   const [filterAutoNote, setFilterAutoNote] = useState<string>("");
   const [cardFlipDir, setCardFlipDir] = useState<Record<number, boolean>>({});
   const [openManualKalshiCards, setOpenManualKalshiCards] = useState<Record<number, boolean>>({});
@@ -2838,6 +2861,8 @@ export default function NbaDashboardTab({
                             | "all"
                             | "qualified"
                             | "anti_nobet"
+                            | "trap_flip"
+                            | "ec_flip"
                             | "formula_a"
                             | "formula_b"
                             | "referee6"
@@ -2858,6 +2883,12 @@ export default function NbaDashboardTab({
                         {fusionMode === "total_elem_12"
                           ? `فقط سیگنال‌های باکس هوشمند حالت ۱۴ • تلفیق A+B (${gamesOnDailyDate.filter((x) => evalSmartMode14(x).sig).length} بازی)`
                           : `فقط سیگنال‌های باکس ضد NO-BET هوشمند (${gamesOnDailyDate.filter((x) => evalSmartAntiNoBet(x).sig).length} بازی)`}
+                      </option>
+                      <option value="trap_flip">
+                        فقط چرخش‌های ضدتله باکس ۱ (TR + EC) ({gamesOnDailyDate.filter((x) => isNhlTrapFlippedCard(x)).length} بازی)
+                      </option>
+                      <option value="ec_flip">
+                        فقط چرخش‌های تله دو-EARTH (EC1..EC4) ({gamesOnDailyDate.filter((x) => isNhlEcTrapCard(x)).length} بازی)
                       </option>
                       {fusionMode === "total_elem_12" && (
                         <>
@@ -3098,6 +3129,30 @@ export default function NbaDashboardTab({
                 const anbWins = anbDone.filter((e) => e.anb.pick === e.g.aw).length;
                 const anbLosses = anbDone.length - anbWins;
                 const anbPct = anbDone.length > 0 ? Math.round((1000 * anbWins) / anbDone.length) / 10 : null;
+
+                const evalTrapPick = (x: NbaGamePred) =>
+                  fusionMode === "nhl_ice_ultralock" || fusionMode === "nhl_anti_nobet"
+                    ? evalPick(x)
+                    : cardFlipDir[x.n]
+                      ? (x.fusion_meta?.modes?.nhl_anti_nobet?.pick || evalPick(x)) === x.h
+                        ? x.a
+                        : x.h
+                      : x.fusion_meta?.modes?.nhl_anti_nobet?.pick || evalPick(x);
+
+                const trapFlipCards = gamesOnDailyDate.filter((x) => isNhlTrapFlippedCard(x));
+                const trapFlipDone = trapFlipCards.filter((x) => Boolean(x.done && x.aw && x.aw !== "PENDING"));
+                const trapFlipWins = trapFlipDone.filter((x) => evalTrapPick(x) === x.aw).length;
+                const trapFlipLosses = trapFlipDone.length - trapFlipWins;
+                const trapFlipPct =
+                  trapFlipDone.length > 0 ? Math.round((1000 * trapFlipWins) / trapFlipDone.length) / 10 : null;
+
+                const ecFlipCards = gamesOnDailyDate.filter((x) => isNhlEcTrapCard(x));
+                const ecFlipDone = ecFlipCards.filter((x) => Boolean(x.done && x.aw && x.aw !== "PENDING"));
+                const ecFlipWins = ecFlipDone.filter((x) => evalTrapPick(x) === x.aw).length;
+                const ecFlipLosses = ecFlipDone.length - ecFlipWins;
+                const ecFlipPct =
+                  ecFlipDone.length > 0 ? Math.round((1000 * ecFlipWins) / ecFlipDone.length) / 10 : null;
+
                 return (
                   <div
                     data-testid="bar-daily-winloss"
@@ -3117,6 +3172,23 @@ export default function NbaDashboardTab({
                           سیگنال فعال روز: {sigCards.length} بازی
                         </span>
                       )}
+                      {trapFlipDone.length > 0 ? (
+                        <span
+                          data-testid="badge-daily-trap-flips"
+                          className="px-2 py-0.5 rounded bg-violet-100 text-violet-950 border border-violet-400 font-mono font-extrabold"
+                        >
+                          🔄 چرخش تله (TR+EC): {trapFlipWins} برد - {trapFlipLosses} باخت ({trapFlipPct}%)
+                          {ecFlipDone.length > 0 ? ` • خاک+یخ EC: ${ecFlipWins}-${ecFlipLosses} (${ecFlipPct}%)` : ""}
+                        </span>
+                      ) : trapFlipCards.length > 0 ? (
+                        <span
+                          data-testid="badge-daily-trap-flips"
+                          className="px-2 py-0.5 rounded bg-violet-50 text-violet-950 border border-violet-300 font-mono font-extrabold"
+                        >
+                          🔄 چرخش تله فعال (TR+EC): {trapFlipCards.length} بازی
+                          {ecFlipCards.length > 0 ? ` (${ecFlipCards.length} تله EC)` : ""}
+                        </span>
+                      ) : null}
                       {fusionMode === "tri_gf_ultralock" && (
                         anbDone.length > 0 ? (
                           <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-950 border border-indigo-400 font-mono font-extrabold">
@@ -3245,6 +3317,32 @@ export default function NbaDashboardTab({
                       >
                         {fusionMode === "total_elem_12" ? `هوشمند ۱۴ A+B (${sm14Active.length})` : `ضد NO-BET (${anbActive.length})`}
                       </button>
+                      <button
+                        type="button"
+                        data-testid="btn-filter-trap-flip"
+                        onClick={() => setDailyCardFilter((prev) => (prev === "trap_flip" ? "all" : "trap_flip"))}
+                        className={`px-2 py-0.5 rounded border font-extrabold transition-colors ${
+                          dailyCardFilter === "trap_flip"
+                            ? "bg-violet-700 text-white border-violet-800 shadow-2xs ring-1 ring-violet-300"
+                            : "bg-violet-100/90 text-violet-950 border-violet-400 hover:bg-violet-200/80"
+                        }`}
+                      >
+                        🔄 چرخش تله ({trapFlipCards.length})
+                      </button>
+                      {(ecFlipCards.length > 0 || dailyCardFilter === "ec_flip") && (
+                        <button
+                          type="button"
+                          data-testid="btn-filter-ec-flip"
+                          onClick={() => setDailyCardFilter((prev) => (prev === "ec_flip" ? "all" : "ec_flip"))}
+                          className={`px-2 py-0.5 rounded border font-extrabold transition-colors ${
+                            dailyCardFilter === "ec_flip"
+                              ? "bg-fuchsia-700 text-white border-fuchsia-800 shadow-2xs ring-1 ring-fuchsia-300"
+                              : "bg-fuchsia-100/90 text-fuchsia-950 border-fuchsia-400 hover:bg-fuchsia-200/80"
+                          }`}
+                        >
+                          🔄 تله EC ({ecFlipCards.length})
+                        </button>
+                      )}
                       {fusionMode === "total_elem_12" && (
                         <>
                           <button
@@ -4996,6 +5094,8 @@ export default function NbaDashboardTab({
                     .filter((item) => {
                       if (dailyCardFilter === "qualified") return item.isQualified;
                       if (dailyCardFilter === "anti_nobet") return fusionMode === "total_elem_12" ? evalSmartMode14(item.g).sig : evalSmartAntiNoBet(item.g).sig;
+                      if (dailyCardFilter === "trap_flip") return isNhlTrapFlippedCard(item.g);
+                      if (dailyCardFilter === "ec_flip") return isNhlEcTrapCard(item.g);
                       if (dailyCardFilter === "formula_a") return fusionMode === "total_elem_12" ? evalSmartMode14(item.g).formulaA.sig : item.isQualified;
                       if (dailyCardFilter === "formula_b") return fusionMode === "total_elem_12" ? evalSmartMode14(item.g).formulaB.sig : item.isQualified;
                       if (dailyCardFilter === "referee6") return fusionMode === "total_elem_12" ? evalSmartMode14(item.g).referee6.active : item.isQualified;
