@@ -436,8 +436,13 @@ type NbaGamePred = {
       h_dom: string;
       a_dom: string;
       dual_water: boolean;
+      h_wt_pwr?: number;
+      a_wt_pwr?: number;
       m15_code: string;
       m15_reason_fa: string;
+      m15_flipped?: boolean;
+      m15_orig_pick?: string;
+      m15_flip_code?: string;
       m16_kind: string;
       m16_reason_fa: string;
     };
@@ -2124,7 +2129,7 @@ export default function NbaDashboardTab({
   const [showMonthlyTable, setShowMonthlyTable] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
   const PAGE_SIZE = 30;
-  const MASTER_DATA_VERSION = "v83";
+  const MASTER_DATA_VERSION = "v83_fg1";
 
   useEffect(() => {
     let cancelled = false;
@@ -3599,8 +3604,12 @@ export default function NbaDashboardTab({
                       fusionMode === "nhl_ice_ultralock" || fusionMode === "nhl_anti_nobet"
                         ? pickM15Ok
                           ? fusionMode === "nhl_ice_ultralock"
-                            ? "🏒 حالت ۱۵: ابرقفل یخ DEG1=88"
-                            : "🏒 حالت ۱۶: ضد NO-BET هاکی"
+                            ? g.fusion_meta?.nhl_ice?.m15_flipped
+                              ? "🔄 حالت ۱۵: چرخش هوشمند Flip Guard"
+                              : "🏒 حالت ۱۵: ابرقفل یخ DEG1=88"
+                            : g.fusion_meta?.nhl_ice?.m15_flipped && g.fusion_meta?.nhl_ice?.m16_kind === "M15_CORE"
+                              ? "🔄 حالت ۱۶: چرخش هوشمند Flip Guard"
+                              : "🏒 حالت ۱۶: ضد NO-BET هاکی"
                           : "— خارج از سیگنال هاکی DEG1=88"
                         : pickDualEarthHold
                           ? "⛔ رد تقابل دو EARTH"
@@ -5148,7 +5157,10 @@ export default function NbaDashboardTab({
                             : undefined;
                       const posInvTriggeredCard = Boolean(
                         (fusionMode === "pos_inv_lock" && g.fusion_meta?.geo1xxx?.pos_inv?.triggered) ||
-                          (isTriAntiDropMode && activeRouteCardObj?.flipped)
+                          (isTriAntiDropMode && activeRouteCardObj?.flipped) ||
+                          (isNhlIceFamily &&
+                            g.fusion_meta?.nhl_ice?.m15_flipped &&
+                            (isNhlIceUltraMode || g.fusion_meta?.nhl_ice?.m16_kind === "M15_CORE"))
                       );
                       const fmtHeroSigned = (v: number) => {
                         const r = Math.round(Number(v || 0) * 10) / 10;
@@ -5206,7 +5218,7 @@ export default function NbaDashboardTab({
                             ? `✓ سیگنال خالص GF-FIN • برنده کمتر/منفی‌تر (ΔGF=${heroGfMargin})`
                             : "تساوی کامل GF-FIN (=)"
                           : isQualified && posInvTriggeredCard
-                            ? `🔄 سیگنال فعال ${activePresetLabel} • ${isTriAntiDropMode ? "معکوس تله ضدحذف" : "معکوس دو-مثبت"} (${wtpObj.l5Pick}%)`
+                            ? `🔄 سیگنال فعال ${activePresetLabel} • ${isNhlIceFamily ? "چرخش هوشمند Flip Guard" : isTriAntiDropMode ? "معکوس تله ضدحذف" : "معکوس دو-مثبت"} (${wtpObj.l5Pick}%)`
                             : isQualified && isVip3
                               ? `⭐ سیگنال VIP ${activePresetLabel} (${wtpObj.matchElem} ${wtpObj.l5Pick}% • ≤${maxBuyCents}¢)`
                               : isQualified
@@ -6154,6 +6166,12 @@ export default function NbaDashboardTab({
                         ICE_DIAMOND: "الماس دو موتور هاکی (T∩P • DEG1=88) + سپر یخ",
                         ICE_YANG_TWIN_LOCK: "ابرقفل هاکی DEG1=88: همزاد دو-ستونی + سپر FIRE/AIR + ۱ گلر و ۷ اسکیت‌باز",
                         ICE_UNION_ASTRO_LOCK: "قفل اتحاد همزاد + نجوم F30 + سپر FIRE/AIR هاکی",
+                        ICE_FLIP_POSPOLE_1G7S:
+                          "🔄 چرخش هوشمند حالت ۱۵ (Flip Guard): مهار تله قطب مثبت (+,+) Σ(1xxx)/Σ(GF) بدون برتری توان وزنی ۱ گلر و ۷ اسکیت‌باز → برد تیم مقابل",
+                        ICE_FLIP_TWIN50_F30:
+                          "🔄 چرخش هوشمند حالت ۱۵ (Flip Guard): مهار بن‌بست همزاد ۵۰٪ (3H-3A) با فیوژن نجومی مرزی → برد تیم مقابل",
+                        ICE_FLIP_POSPOLE_AND_TWIN50:
+                          "🔄 چرخش هوشمند حالت ۱۵ (Flip Guard): مهار هم‌زمان تله دو-مثبت (+,+) ۱G+7S و همزاد ۵۰٪ مرزی → برد تیم مقابل",
                         ICE_YIN_TRAP_HOLD: "توقف ایمنی هاکی: مهار تله قطب سرد (WATER / EARTH)",
                         ICE_ELEM_TIE_HOLD: "توقف ایمنی هاکی: مهار برابری المنت کل (TIE / ۲×WATER)",
                         ICE_B2B_FATIGUE_HOLD: "توقف ایمنی هاکی: مهار خستگی Back-to-Back بدون استراحت",

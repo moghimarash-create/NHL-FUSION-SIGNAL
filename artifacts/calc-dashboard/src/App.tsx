@@ -44,24 +44,24 @@ type ModeBenchInfo = {
 
 const DEFAULT_FUSION_MODES: Record<FusionModeKey, ModeBenchInfo> = {
   nhl_ice_ultralock: {
-    shortFa: "حالت ۱۵ (ابرقفل اختصاصی هاکی NHL • DEG1=88 + سپر FIRE/AIR + ۱ گلر و ۷ اسکیت‌باز): پیش‌فرض",
-    formulaEn: "NHL_Ice_UltraLock(DEG1=88, 1G+7S_TOI, Pyth_2.05) = Diamond ∪ [(DualPillar | TwinUnion_Astro) & YangShield(FIRE|AIR) & Dom!=TIE & !2xWATER & Rest/Home_Guard]",
-    holdPct: "65.3%",
-    holdRec: "49/75",
-    s2526: "64.5% (40/62)",
-    s2627: "69.2% (9/13)",
-    last50: "68.0% (34/50)",
-    edge: "All 71.2% (104/146)",
+    shortFa: "حالت ۱۵ (ابرقفل اختصاصی هاکی NHL • DEG1=88 + سپر FIRE/AIR + ۱ گلر و ۷ اسکیت‌باز + چرخش هوشمند Flip Guard): پیش‌فرض",
+    formulaEn: "NHL_Ice_UltraLock(DEG1=88, 1G+7S_TOI, Pyth_2.05) + FlipGuard[!Diamond & ((BothPos_1xxx & Δ1xxx<=-2 & ΔGF<=-3 & ΔWtPwr>-2.2) ∪ (Twin50% & |F30|<=4)) -> Flip_Opp]",
+    holdPct: "68.0%",
+    holdRec: "51/75",
+    s2526: "66.1% (41/62)",
+    s2627: "76.9% (10/13)",
+    last50: "72.0% (36/50)",
+    edge: "+2.7pp • All 76.7% (112/146)",
   },
   nhl_anti_nobet: {
     shortFa: "حالت ۱۶ (ضد NO-BET هوشمند هاکی NHL: حالت ۱۵ + اتحاد یانگ و شکار تله سرد WATER/EARTH)",
-    formulaEn: "Mode_15_Core ∪ YangUnion_Release(FIRE|AIR, Dom!=TIE) ∪ Contender_YinMismatch(FIRE|AIR vs WATER|EARTH, Pyth>=65%, T==P, F30>=0)",
-    holdPct: "60.3%",
-    holdRec: "82/136",
-    s2526: "57.4% (58/101)",
-    s2627: "68.6% (24/35)",
-    last50: "70.0% (35/50)",
-    edge: "VIP 65.7% (113/172)",
+    formulaEn: "Mode_15_Core(FlipGuard) ∪ YangUnion_Release(FIRE|AIR, Dom!=TIE) ∪ Contender_YinMismatch(FIRE|AIR vs WATER|EARTH, Pyth>=65%, T==P, F30>=0)",
+    holdPct: "61.8%",
+    holdRec: "84/136",
+    s2526: "58.4% (59/101)",
+    s2627: "71.4% (25/35)",
+    last50: "72.0% (36/50)",
+    edge: "VIP 70.3% (121/172)",
   },
   geo_1xxx_lock: {
     shortFa: "حالت ۵ (فیلتر رمل ۱xxx • ۱ گلر + ۷ اسکیت‌باز): تلفیق دو-ستونی + برتری منفی ۱xxx",
@@ -445,10 +445,10 @@ function Home() {
 
               <div className="rounded-lg border border-cyan-300 bg-cyan-50/80 p-2.5 text-xs text-slate-800 leading-relaxed">
                 <div className="font-extrabold text-cyan-950 mb-1">
-                  کالیبراسیون اختصاصی هاکی روی یخ در حالت ۱۵ و ۱۶ (DEG1=88 • 28 GEMINI • بدون آینده‌نگری Zero-Lookahead):
+                  کالیبراسیون اختصاصی هاکی روی یخ در حالت ۱۵ و ۱۶ + لایه چرخش هوشمند Flip Guard (DEG1=88 • بدون آینده‌نگری Zero-Lookahead):
                 </div>
                 <div>
-                  ۱) <b>اصلاح ترکیب بازیکنان هاکی (۱ گلر اصلی + اسکیت‌بازان بر اساس TOI)</b>: حذف آلودگی گلر ذخیره در لیست ۸ نفره (<b>حداکثر ۱ گلر شروع‌کننده + ۷ اسکیت‌باز برتر TOI</b>) و لیست ۱۲ نفره (<b>۱ گلر + ۱۱ اسکیت‌باز</b>) • ۲) <b>سپر یانگ هاکی (FIRE + AIR) و مهار تله قطب سرد (WATER + EARTH)</b>: جایگزینی توان بسکتبال با توان پیتاگورین واقعی گل‌های هاکی (<b>exp = 2.05</b>)؛ هم‌سویی با عنصر هوا در <b>DEG1=88</b> • ۳) <b>مهار تله برابری المنت کل (TIE / ۲×WATER)</b>، جریمه خستگی <b>Back-to-Back</b> و آستانه تعویض آخر میزبان (<b>۵۸٪ میزبان / ۶۰٪ میهمان</b>) در کنار حفظ کامل حالت‌های مرجع ۱ تا ۱۴.
+                  ۱) <b>اصلاح ترکیب بازیکنان هاکی (۱ گلر اصلی + اسکیت‌بازان بر اساس TOI)</b>: حذف آلودگی گلر ذخیره در لیست ۸ نفره (<b>۱ گلر شروع‌کننده + ۷ اسکیت‌باز برتر TOI</b>) و لیست ۱۲ نفره (<b>۱ گلر + ۱۱ اسکیت‌باز</b>) • ۲) <b>سپر یانگ هاکی (FIRE + AIR) و توان پیتاگورین گل‌های هاکی (exp = 2.05)</b> در کنار مهار تله برابری المنت کل (<b>TIE / ۲×WATER</b>) و خستگی <b>Back-to-Back</b> • ۳) <b>لایه چرخش هوشمند حالت ۱۵ (Flip Guard بدون حذف حتی یک بازی یا تیم)</b>: خارج از قفل الماس، در <b>تله قطب مثبت (+,+) Σ(1xxx) و داور Σ(GF) بدون برتری توان وزنی ۱ گلر و ۷ اسکیت‌باز (ΔWtPwr &gt; -2.2)</b> و همچنین در <b>بن‌بست همزاد ۵۰٪ (3H-3A) با فیوژن مرزی (|F30| ≤ 4)</b> پیش‌بینی به تیم مقابل چرخانده می‌شود (افزایش برد کل به <b>۷۶.۷٪ • ۱۱۲/۱۴۶</b>، برون‌نمونه به <b>۶۸.۰٪ • ۵۱/۷۵</b> و فصل جاری به <b>۷۶.۹٪ • ۱۰/۱۳</b> با حفظ کامل حالت‌های مرجع ۱ تا ۱۴).
                 </div>
               </div>
 

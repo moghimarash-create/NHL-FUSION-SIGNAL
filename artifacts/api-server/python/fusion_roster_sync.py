@@ -510,7 +510,7 @@ def eval_team_lineup_exact(d_ctx, lineup, tbl, p_static):
         ef_s = f"{ef[0]}-{ef[1]}-{ef[2]}-{ef[3]}"
         cards.append({
             "pid": pid, "fn": ps["fn"], "jn": ps["jn"], "no": ps["j_str"], "pos": ps["pos"],
-            "st": is_st, "mpg": mpg, "d2": d2, "d3": d3,
+            "st": is_st, "toi": mpg, "mpg": mpg, "d2": d2, "d3": d3,
             "ep": f"{ep[0]}-{ep[1]}-{ep[2]}-{ep[3]}",
             "ef": ef_s,
             "gf": geo_code_from_ef_str(ef_s),
@@ -1241,7 +1241,86 @@ def recompute_all_fusion_modes(g):
                     else f"قفل اتحاد همزاد + نجوم F30 + سپر {pel_15} ({p_ice_15:.1f}%)"
                 )
 
-    fm["modes"]["nhl_ice_ultralock"] = {"sig": m15_sig, "vip": m15_vip, "pick": m15_pick}
+    def _wt_pwr_1g7s(plist):
+        if not plist:
+            return 0.0
+        w_num = 0.0
+        w_den = 0.0
+        for p_item in plist:
+            w_i = float(p_item.get("toi") if p_item.get("toi") is not None else p_item.get("mpg", 15.0))
+            w_num += float(p_item.get("pwr", 0.0)) * w_i
+            w_den += w_i
+        return round(w_num / max(1.0, w_den), 2)
+
+    h_wt_15 = _wt_pwr_1g7s(hp_list)
+    a_wt_15 = _wt_pwr_1g7s(ap_list)
+    m15_flipped = False
+    m15_orig_pick = m15_pick
+    m15_flip_code = ""
+
+    if m15_sig and not dia_m["sig"]:
+        ish_fg = (m15_pick == h)
+        opp_fg = a if ish_fg else h
+        pk_1x_fg = float(h_sum if ish_fg else a_sum)
+        op_1x_fg = float(a_sum if ish_fg else h_sum)
+        pk_gf_fg = float(h_gf if ish_fg else a_gf)
+        op_gf_fg = float(a_gf if ish_fg else h_gf)
+        pk_wt_fg = h_wt_15 if ish_fg else a_wt_15
+        op_wt_fg = a_wt_15 if ish_fg else h_wt_15
+        d_1x_fg = round(pk_1x_fg - op_1x_fg, 1)
+        d_gf_fg = round(pk_gf_fg - op_gf_fg, 1)
+        d_wt_fg = round(pk_wt_fg - op_wt_fg, 2)
+        try:
+            tpct_fg = int(str(tm_meta.get("pct", "50")).replace("%", "").strip() or 50)
+        except Exception:
+            tpct_fg = 50
+        try:
+            ppct_fg = int(str(pl_meta.get("pct", "50")).replace("%", "").strip() or 50)
+        except Exception:
+            ppct_fg = 50
+        f30_sum_fg = f30_t15 + f30_p15
+
+        # Zero-Lookahead Structural Flip Guard (< 50% in 2012-2024, 2024-25, and 2025-27 OOS):
+        # (1) Hollow Positive-Pole (+,+) Σ(1xxx) & Σ(GF) without dominant 1G+7S TOI-weighted power
+        trig_pospole_1g7s = (
+            pk_1x_fg > 0.0
+            and op_1x_fg > 0.0
+            and d_1x_fg <= -2.0
+            and d_gf_fg <= -3.0
+            and d_wt_fg > -2.2
+        )
+        # (2) 50% Twin Tie (3H-3A) with borderline Fusion(30) (|F30| <= 4)
+        trig_twin50_f30 = (min(tpct_fg, ppct_fg) == 50) and (abs(f30_sum_fg) <= 4)
+
+        if trig_pospole_1g7s or trig_twin50_f30:
+            m15_flipped = True
+            m15_orig_pick = m15_pick
+            m15_pick = opp_fg
+            if trig_pospole_1g7s and trig_twin50_f30:
+                m15_flip_code = "ICE_FLIP_POSPOLE_AND_TWIN50"
+                m15_code = m15_flip_code
+                m15_fa = (
+                    f"چرخش هوشمند حالت ۱۵ (Flip Guard) به {opp_fg} (ردِ {m15_orig_pick}): "
+                    f"هم‌زمانی تله دو-مثبت (+,+) Σ(1xxx)/Σ(GF) بدون برتری توان وزنی ۱G+7S (ΔWt={d_wt_fg:+.2f}) + همزاد ۵۰٪ مرزی (F30={f30_sum_fg:+d})"
+                )
+            elif trig_pospole_1g7s:
+                m15_flip_code = "ICE_FLIP_POSPOLE_1G7S"
+                m15_code = m15_flip_code
+                m15_fa = (
+                    f"چرخش هوشمند حالت ۱۵ (Flip Guard) به {opp_fg} (ردِ {m15_orig_pick}): "
+                    f"تله قطب مثبت (+,+) Σ(1xxx) ({pk_1x_fg:+.1f}v{op_1x_fg:+.1f}) و داور Σ(GF) (ΔGF={d_gf_fg:+.1f}) بدون برتری توان وزنی ۱ گلر و ۷ اسکیت‌باز (ΔWt={d_wt_fg:+.2f})"
+                )
+            else:
+                m15_flip_code = "ICE_FLIP_TWIN50_F30"
+                m15_code = m15_flip_code
+                m15_fa = (
+                    f"چرخش هوشمند حالت ۱۵ (Flip Guard) به {opp_fg} (ردِ {m15_orig_pick}): "
+                    f"تله بن‌بست همزاد ۵۰٪ (3H-3A) با فیوژن نجومی مرزی (F30={f30_sum_fg:+d})"
+                )
+
+    fm["modes"]["nhl_ice_ultralock"] = {
+        "sig": m15_sig, "vip": m15_vip, "pick": m15_pick, "flipped": m15_flipped,
+    }
 
     # Mode 16 (`nhl_anti_nobet`): Mode 15 Core + Yang Union Release + Rested Contender vs Yin Trap
     m16_sig = False
@@ -1319,8 +1398,13 @@ def recompute_all_fusion_modes(g):
         "h_dom": h_dom13,
         "a_dom": a_dom13,
         "dual_water": dual_water_13,
+        "h_wt_pwr": h_wt_15,
+        "a_wt_pwr": a_wt_15,
         "m15_code": m15_code,
         "m15_reason_fa": m15_fa,
+        "m15_flipped": m15_flipped,
+        "m15_orig_pick": m15_orig_pick,
+        "m15_flip_code": m15_flip_code,
         "m16_kind": m16_kind,
         "m16_reason_fa": m16_fa,
     }
@@ -1373,7 +1457,7 @@ def recompute_all_fusion_modes(g):
 def recompute_summary(games):
     done_auth = [g for g in games if g.get("done") and (g.get("fusion_meta") or {}).get("in_auth_overlap") and g.get("aw")]
     MODE_DEFS = [
-        ("nhl_ice_ultralock","حالت ۱۵ (ابرقفل اختصاصی هاکی NHL • DEG1=88 + سپر FIRE/AIR + ۱ گلر و ۷ اسکیت‌باز): پیش‌فرض"),
+        ("nhl_ice_ultralock","حالت ۱۵ (ابرقفل اختصاصی هاکی NHL • DEG1=88 + سپر FIRE/AIR + ۱ گلر و ۷ اسکیت‌باز + چرخش هوشمند Flip Guard): پیش‌فرض"),
         ("nhl_anti_nobet",   "حالت ۱۶ (ضد NO-BET هوشمند اختصاصی هاکی NHL • حالت ۱۵ + اتحاد یانگ و شکار تله سرد)"),
         ("total_elem_12",    "حالت ۱۴ (موتور قطبیت کامل المنت کل: ۱ گلر + ۱۱ اسکیت‌باز + تیم)"),
         ("anti_nobet_smart", "حالت ۱۳ (ضد NO-BET هوشمند: حالت ۱۲ + آزادسازی مستقیم + چرخش عکس)"),
