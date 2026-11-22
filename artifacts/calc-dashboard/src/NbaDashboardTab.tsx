@@ -2117,9 +2117,12 @@ export default function NbaDashboardTab({
     const ice = g.fusion_meta?.nhl_ice;
     return Boolean(ice?.nobet_flipped || ice?.m15_flipped || ice?.m16_flipped);
   };
+  const isNhlSignalOrTrapCard = (g: NbaGamePred) =>
+    Boolean(activeF1WtpOf(g) || isNhlTrapFlippedCard(g));
   const [dailyCardFilter, setDailyCardFilter] = useState<
     | "all"
     | "qualified"
+    | "signal_or_trap"
     | "anti_nobet"
     | "trap_flip"
     | "ec_flip"
@@ -2860,6 +2863,7 @@ export default function NbaDashboardTab({
                           e.target.value as
                             | "all"
                             | "qualified"
+                            | "signal_or_trap"
                             | "anti_nobet"
                             | "trap_flip"
                             | "ec_flip"
@@ -2879,6 +2883,9 @@ export default function NbaDashboardTab({
                     >
                       <option value="all">همه کارت‌های روز ({gamesOnDailyDate.length} بازی)</option>
                       <option value="qualified">فقط سیگنال‌های تاییدشده موتور فعال ({gamesOnDailyDate.filter((x) => activeF1WtpOf(x)).length} بازی)</option>
+                      <option value="signal_or_trap">
+                        سیگنال‌های فعال + چرخش‌های ضدتله ({gamesOnDailyDate.filter((x) => isNhlSignalOrTrapCard(x)).length} بازی)
+                      </option>
                       <option value="anti_nobet">
                         {fusionMode === "total_elem_12"
                           ? `فقط سیگنال‌های باکس هوشمند حالت ۱۴ • تلفیق A+B (${gamesOnDailyDate.filter((x) => evalSmartMode14(x).sig).length} بازی)`
@@ -3153,6 +3160,15 @@ export default function NbaDashboardTab({
                 const ecFlipPct =
                   ecFlipDone.length > 0 ? Math.round((1000 * ecFlipWins) / ecFlipDone.length) / 10 : null;
 
+                const evalComboPick = (x: NbaGamePred) =>
+                  activeF1WtpOf(x) ? evalPick(x) : evalTrapPick(x);
+                const sigOrTrapCards = gamesOnDailyDate.filter((x) => isNhlSignalOrTrapCard(x));
+                const sigOrTrapDone = sigOrTrapCards.filter((x) => Boolean(x.done && x.aw && x.aw !== "PENDING"));
+                const sigOrTrapWins = sigOrTrapDone.filter((x) => evalComboPick(x) === x.aw).length;
+                const sigOrTrapLosses = sigOrTrapDone.length - sigOrTrapWins;
+                const sigOrTrapPct =
+                  sigOrTrapDone.length > 0 ? Math.round((1000 * sigOrTrapWins) / sigOrTrapDone.length) / 10 : null;
+
                 return (
                   <div
                     data-testid="bar-daily-winloss"
@@ -3187,6 +3203,21 @@ export default function NbaDashboardTab({
                         >
                           🔄 چرخش تله فعال (TR+EC): {trapFlipCards.length} بازی
                           {ecFlipCards.length > 0 ? ` (${ecFlipCards.length} تله EC)` : ""}
+                        </span>
+                      ) : null}
+                      {sigOrTrapDone.length > 0 ? (
+                        <span
+                          data-testid="badge-daily-sig-or-trap"
+                          className="px-2 py-0.5 rounded bg-gradient-to-l from-emerald-100 via-teal-100 to-violet-100 text-slate-950 border border-teal-500 font-mono font-extrabold shadow-2xs"
+                        >
+                          ⚡ سیگنال + چرخش تله: {sigOrTrapWins} برد - {sigOrTrapLosses} باخت ({sigOrTrapPct}%)
+                        </span>
+                      ) : sigOrTrapCards.length > 0 ? (
+                        <span
+                          data-testid="badge-daily-sig-or-trap"
+                          className="px-2 py-0.5 rounded bg-gradient-to-l from-emerald-50 via-teal-50 to-violet-50 text-teal-950 border border-teal-400 font-mono font-extrabold"
+                        >
+                          ⚡ سیگنال + چرخش تله: {sigOrTrapCards.length} بازی فعال
                         </span>
                       ) : null}
                       {fusionMode === "tri_gf_ultralock" && (
@@ -3308,6 +3339,18 @@ export default function NbaDashboardTab({
                         className={`px-2 py-0.5 rounded border ${dailyCardFilter === "qualified" ? "bg-emerald-700 text-white border-emerald-800" : "bg-white text-slate-700 border-sky-200 hover:bg-sky-50"}`}
                       >
                         سیگنال ({sigCards.length})
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="btn-filter-sig-or-trap"
+                        onClick={() => setDailyCardFilter((prev) => (prev === "signal_or_trap" ? "all" : "signal_or_trap"))}
+                        className={`px-2 py-0.5 rounded border font-extrabold transition-colors ${
+                          dailyCardFilter === "signal_or_trap"
+                            ? "bg-teal-700 text-white border-teal-800 shadow-2xs ring-1 ring-teal-300"
+                            : "bg-gradient-to-l from-emerald-50 to-violet-100 text-teal-950 border-teal-400 hover:from-emerald-100 hover:to-violet-200"
+                        }`}
+                      >
+                        ⚡ سیگنال + چرخش ({sigOrTrapCards.length})
                       </button>
                       <button
                         type="button"
@@ -5093,6 +5136,7 @@ export default function NbaDashboardTab({
                     })
                     .filter((item) => {
                       if (dailyCardFilter === "qualified") return item.isQualified;
+                      if (dailyCardFilter === "signal_or_trap") return Boolean(item.isQualified || isNhlTrapFlippedCard(item.g));
                       if (dailyCardFilter === "anti_nobet") return fusionMode === "total_elem_12" ? evalSmartMode14(item.g).sig : evalSmartAntiNoBet(item.g).sig;
                       if (dailyCardFilter === "trap_flip") return isNhlTrapFlippedCard(item.g);
                       if (dailyCardFilter === "ec_flip") return isNhlEcTrapCard(item.g);
