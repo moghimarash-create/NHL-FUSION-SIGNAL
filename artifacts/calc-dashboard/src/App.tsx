@@ -44,24 +44,24 @@ type ModeBenchInfo = {
 
 const DEFAULT_FUSION_MODES: Record<FusionModeKey, ModeBenchInfo> = {
   nhl_ice_ultralock: {
-    shortFa: "حالت ۱۵ (ابرقفل اختصاصی هاکی NHL • DEG1=88 + سپر FIRE/AIR + ۱ گلر و ۷ اسکیت‌باز + چرخش هوشمند Flip Guard): پیش‌فرض",
-    formulaEn: "NHL_Ice_UltraLock(DEG1=88, 1G+7S_TOI, Pyth_2.05) + FlipGuard[!Diamond & ((BothPos_1xxx & Δ1xxx<=-2 & ΔGF<=-3 & ΔWtPwr>-2.2) ∪ (Twin50% & |F30|<=4)) -> Flip_Opp]",
-    holdPct: "68.0%",
-    holdRec: "51/75",
-    s2526: "66.1% (41/62)",
+    shortFa: "حالت ۱۵ (ابرقفل اختصاصی هاکی NHL • DEG1=88 + سپر FIRE/AIR + ۱ گلر و ۷ اسکیت‌باز + چرخش دوقطبی Flip Guard): پیش‌فرض",
+    formulaEn: "NHL_Ice_UltraLock(DEG1=88, 1G+7S_TOI, Pyth_2.05) + FlipGuard[!Diamond & (PosPole_1G7S ∪ Twin50_F30 ∪ TR8_Bipolar ∪ TR9_ColdDGF)] + !M16_8TrapRoute",
+    holdPct: "69.3%",
+    holdRec: "52/75",
+    s2526: "67.7% (42/62)",
     s2627: "76.9% (10/13)",
-    last50: "72.0% (36/50)",
-    edge: "+2.7pp • All 76.7% (112/146)",
+    last50: "74.0% (37/50)",
+    edge: "+4.4pp • All 79.5% (116/146)",
   },
   nhl_anti_nobet: {
-    shortFa: "حالت ۱۶ (ضد NO-BET هوشمند هاکی NHL: حالت ۱۵ + اتحاد یانگ و شکار تله سرد WATER/EARTH)",
-    formulaEn: "Mode_15_Core(FlipGuard) ∪ YangUnion_Release(FIRE|AIR, Dom!=TIE) ∪ Contender_YinMismatch(FIRE|AIR vs WATER|EARTH, Pyth>=65%, T==P, F30>=0)",
-    holdPct: "61.8%",
-    holdRec: "84/136",
-    s2526: "58.4% (59/101)",
-    s2627: "71.4% (25/35)",
-    last50: "72.0% (36/50)",
-    edge: "VIP 70.3% (121/172)",
+    shortFa: "حالت ۱۶ (ضد NO-BET هوشمند هاکی NHL: حالت ۱۵ + اتحاد یانگ و شکار تله سرد + گارد دوقطبی TR8∪TR9)",
+    formulaEn: "Mode_15_Core ∪ [(YangUnion_Release ∪ Contender_YinMismatch) + FlipGuard(TR8 ∪ TR9)] + !M16_8TrapRoute(59.9% All 3,150)",
+    holdPct: "64.0%",
+    holdRec: "87/136",
+    s2526: "60.4% (61/101)",
+    s2627: "74.3% (26/35)",
+    last50: "74.0% (37/50)",
+    edge: "All 69.8% (183/262) • VIP 70.9%",
   },
   geo_1xxx_lock: {
     shortFa: "حالت ۵ (فیلتر رمل ۱xxx • ۱ گلر + ۷ اسکیت‌باز): تلفیق دو-ستونی + برتری منفی ۱xxx",
@@ -445,10 +445,10 @@ function Home() {
 
               <div className="rounded-lg border border-cyan-300 bg-cyan-50/80 p-2.5 text-xs text-slate-800 leading-relaxed">
                 <div className="font-extrabold text-cyan-950 mb-1">
-                  کالیبراسیون اختصاصی هاکی روی یخ در حالت ۱۵ و ۱۶ + قطبیت خالص ۱G+7S و چرخش هوشمند Flip Guard (DEG1=88 • Zero-Lookahead):
+                  کالیبراسیون اختصاصی هاکی روی یخ در حالت ۱۵ و ۱۶ + گارد چرخش دوقطبی (TR8∪TR9) و مسیریاب ضدتله باکس ۱ (DEG1=88 • Zero-Lookahead):
                 </div>
                 <div>
-                  ۱) <b>ترکیب خالص بازیکنان هاکی (۱ گلر اصلی + ۷ اسکیت‌باز برتر TOI)</b> و نمایش کامل <b>قطب گرم Σ(1xxx)</b>، <b>قطب سرد Σ(0xxx)</b> و <b>اختلاف قطبین Δ(1xxx − 0xxx)</b> (همراه مقایسه <b>+تیم</b>) در باکس ۱ حالت‌های ۱۵ و ۱۶ • ۲) <b>سپر یانگ هاکی (FIRE + AIR) و توان پیتاگورین گل‌های هاکی (exp = 2.05)</b> در کنار مهار تله برابری المنت کل (<b>TIE / ۲×WATER</b>) و خستگی <b>Back-to-Back</b> • ۳) <b>لایه چرخش هوشمند حالت ۱۵ (Flip Guard بدون حذف حتی یک بازی یا تیم)</b>: چرخش به تیم مقابل در <b>تله دو-مثبت (+,+) Σ(1xxx)/Σ(GF) بدون برتری توان وزنی ۱ گلر و ۷ اسکیت‌باز (ΔWtPwr &gt; -2.2)</b> و <b>بن‌بست همزاد ۵۰٪ با فیوژن مرزی (|F30| ≤ 4)</b> (برد کل <b>۷۶.۷٪ • ۱۱۲/۱۴۶</b>، برون‌نمونه <b>۶۸.۰٪ • ۵۱/۷۵</b> و فصل جاری <b>۷۶.۹٪ • ۱۰/۱۳</b> با حفظ کامل حالت‌های ۱ تا ۱۴).
+                  ۱) <b>ترکیب خالص بازیکنان هاکی (۱ گلر اصلی + ۷ اسکیت‌باز برتر TOI)</b> با نمایش کامل <b>قطب گرم Σ(1xxx)</b>، <b>قطب سرد Σ(0xxx)</b> و <b>اختلاف قطبین Δ(1xxx − 0xxx)</b> (همراه بردار <b>+Tm</b>) در باکس ۱ حالت‌های ۱۵ و ۱۶ • ۲) <b>لایه چرخش هوشمند سیگنال‌های حالت ۱۵ و ۱۶ (Flip Guard بدون حذف حتی یک بازی یا تیم)</b>: مهار تله دو-مثبت (+,+) ۱G+7S، بن‌بست همزاد ۵۰٪ مرزی و <b>گارد دوقطبی خالص TR8 ∪ TR9</b> (قطب سرد مثبت حریف با Δ(1xxx−0xxx) عمیق‌تر حریف یا برتری ΔGF حریف زیر ۵۸٪) ⬅ ارتقای حالت ۱۵ به <b>۷۹.۵٪ کل (۱۱۶/۱۴۶ • ۲۰۲۴–۲۵: ۹۰.۱٪ • برون‌نمونه: ۶۹.۳٪)</b> و حالت ۱۶ به <b>۶۹.۸٪ کل (۱۸۳/۲۶۲ • بهبود هر ۳ فصل)</b> • ۳) <b>مسیریاب ضدحذف بازی‌های خارج از سیگنال (!M16 = ۲٬۸۸۸ بازی)</b>: چرخش خودکار تله‌های سه‌فصله باکس ۱ (<b>TR1∪TR2∪TR3∪TR5∪TR6∪TR7∪TR12∪TR13</b> روی Pyth≥50%) و ارتقای کل <b>۳٬۱۵۰ بازی مسیریابی‌شده</b> کارت ۶ به <b>۵۹.۸۷٪ (۱٬۸۸۶/۳٬۱۵۰ • +۱۲۳ برد خالص)</b> با حفظ دست‌نخورده حالت‌های ۱ تا ۱۴.
                 </div>
               </div>
 

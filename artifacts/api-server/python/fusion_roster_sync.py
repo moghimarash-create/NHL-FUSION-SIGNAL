@@ -1158,6 +1158,89 @@ def recompute_all_fusion_modes(g):
     h_dom13 = _dom_vec4((t12_blk or {}).get("h_ef_tot"))
     a_dom13 = _dom_vec4((t12_blk or {}).get("a_ef_tot"))
     dual_water_13 = (h_dom13 == "WATER" and a_dom13 == "WATER")
+    h_ef_v4 = (t12_blk or {}).get("h_ef_tot") or []
+    a_ef_v4 = (t12_blk or {}).get("a_ef_tot") or []
+    if len(h_ef_v4) == 4 and len(a_ef_v4) == 4:
+        h_lead13 = sum(1 for i in range(4) if h_ef_v4[i] > a_ef_v4[i])
+        a_lead13 = sum(1 for i in range(4) if a_ef_v4[i] > h_ef_v4[i])
+    else:
+        h_lead13 = 0
+        a_lead13 = 0
+
+    h_w_gff8 = round(sum(float(p.get("gf_fin", 0.0)) for p in hp_list if str(p.get("gf", ""))[:1] == "1"), 1)
+    a_w_gff8 = round(sum(float(p.get("gf_fin", 0.0)) for p in ap_list if str(p.get("gf", ""))[:1] == "1"), 1)
+    h_c_gff8 = round(sum(float(p.get("gf_fin", 0.0)) for p in hp_list if str(p.get("gf", ""))[:1] == "0"), 1)
+    a_c_gff8 = round(sum(float(p.get("gf_fin", 0.0)) for p in ap_list if str(p.get("gf", ""))[:1] == "0"), 1)
+    h_d_pwr8 = round(h_sum - h_0xxx, 1)
+    a_d_pwr8 = round(a_sum - a_0xxx, 1)
+    h_d_gff8 = round(h_w_gff8 - h_c_gff8, 1)
+    a_d_gff8 = round(a_w_gff8 - a_c_gff8, 1)
+    h_tm_e = (t12_blk or {}).get("h_tm_ent") or {}
+    a_tm_e = (t12_blk or {}).get("a_tm_ent") or {}
+    h_tm_sgn = 1.0 if str(h_tm_e.get("gf", "0"))[:1] == "1" else -1.0
+    a_tm_sgn = 1.0 if str(a_tm_e.get("gf", "0"))[:1] == "1" else -1.0
+    h_d_pwr9 = round(h_d_pwr8 + h_tm_sgn * float(h_tm_e.get("pwr", 0.0)), 1)
+    a_d_pwr9 = round(a_d_pwr8 + a_tm_sgn * float(a_tm_e.get("pwr", 0.0)), 1)
+    h_d_gff9 = round(h_d_gff8 + h_tm_sgn * float(h_tm_e.get("gff", 0.0)), 1)
+    a_d_gff9 = round(a_d_gff8 + a_tm_sgn * float(a_tm_e.get("gff", 0.0)), 1)
+
+    fav_is_h_ice = (ph_ice >= 50.0)
+    fav_ice = h if fav_is_h_ice else a
+    dog_ice = a if fav_is_h_ice else h
+    p_fav_ice = ph_ice if fav_is_h_ice else round(100.0 - ph_ice, 1)
+
+    def _fd_ice(vh, va):
+        return (vh, va) if fav_is_h_ice else (va, vh)
+
+    w_pwr_f, w_pwr_d = _fd_ice(h_sum, a_sum)
+    cnt1_f, cnt1_d   = _fd_ice(h_cnt, a_cnt)
+    w_gf_f, w_gf_d   = _fd_ice(h_w_gff8, a_w_gff8)
+    c_pwr_f, c_pwr_d = _fd_ice(h_0xxx, a_0xxx)
+    cnt0_f, cnt0_d   = _fd_ice(h_0cnt, a_0cnt)
+    dp8_f, dp8_d     = _fd_ice(h_d_pwr8, a_d_pwr8)
+    dg8_f, dg8_d     = _fd_ice(h_d_gff8, a_d_gff8)
+    b2b_f, b2b_d     = _fd_ice(hb2b_ice, ab2b_ice)
+    lead_f, lead_d   = _fd_ice(h_lead13, a_lead13)
+
+    # Pure 3-season Bipolar Signal Flip Guards (TR8 U TR9, <50% in all 3 seasons globally):
+    sig_trap_tr8 = bool((w_pwr_f < 0.0) and (c_pwr_f < 0.0 and c_pwr_d > 0.0) and (dp8_f > dp8_d))
+    sig_trap_tr9 = bool((c_pwr_f < c_pwr_d) and (dg8_f > dg8_d) and (p_fav_ice < 58.0))
+
+    # 8 Core 3-Season Box-1 Traps (TR1 U TR2 U TR3 U TR5 U TR6 U TR7 U TR12 U TR13) for !M16 Non-Bet Routing:
+    nobet_trap_code = ""
+    nobet_trap_desc_fa = ""
+    if (w_pwr_f < 0.0) and (cnt0_f == 0 and cnt0_d > 0):
+        nobet_trap_code = "TR1"
+        nobet_trap_desc_fa = f"تله TR1 باکس ۱: حبس ۸/۸ در قطب گرم منفی و صفر بودن قطب سرد (۰/۸) روی {fav_ice}"
+    elif (cnt1_f < cnt1_d) and (c_pwr_f < 0.0 and c_pwr_d > 0.0) and (dg8_f > dg8_d):
+        nobet_trap_code = "TR2"
+        nobet_trap_desc_fa = f"تله TR2 باکس ۱: کمبود نفرات ۱xxx ({cnt1_f}v{cnt1_d}) + قطب سرد منفی کاذب + برتری ΔGF(1xxx−0xxx) حریف ({dg8_d:+.1f}v{dg8_f:+.1f})"
+    elif (w_pwr_f < w_pwr_d) and (c_pwr_f < 0.0 and c_pwr_d > 0.0) and (dg8_f > dg8_d):
+        nobet_trap_code = "TR3"
+        nobet_trap_desc_fa = f"تله TR3 باکس ۱: هم‌جهتی کاذب با قطب سرد مثبت حریف + برتری ΔGF(1xxx−0xxx) حریف ({dg8_d:+.1f}v{dg8_f:+.1f})"
+    elif (w_pwr_f < 0.0) and (w_pwr_f > w_pwr_d and c_pwr_f > c_pwr_d) and (p_fav_ice < 58.0):
+        nobet_trap_code = "TR5"
+        nobet_trap_desc_fa = f"تله TR5 باکس ۱: هم‌جهتی کامل دو قطب ۱xxx و ۰xxx به سود {dog_ice} در سپر یخ زیر ۵۸٪ ({p_fav_ice:.1f}%)"
+    elif (w_pwr_f < 0.0) and (lead_d >= 3) and (p_fav_ice < 55.0):
+        nobet_trap_code = "TR6"
+        nobet_trap_desc_fa = f"تله TR6 باکس ۱: برتری ۳/۴ عناصر [F-A-W-E] به سود {dog_ice} در سپر یخ مرزی ({p_fav_ice:.1f}%)"
+    elif (w_pwr_f < w_pwr_d and c_pwr_f < c_pwr_d) and (lead_d >= 3) and (p_fav_ice < 58.0):
+        nobet_trap_code = "TR7"
+        nobet_trap_desc_fa = f"تله TR7 باکس ۱: غلبه برتری ۳/۴ عناصر [F-A-W-E] حریف ({dog_ice}) بر قطبین در Pyth زیر ۵۸٪"
+    elif (w_pwr_f > 0.0 and w_pwr_d > 0.0) and (dg8_f < dg8_d) and (b2b_f and not b2b_d):
+        nobet_trap_code = "TR12"
+        nobet_trap_desc_fa = f"تله TR12 باکس ۱: خستگی B2B روی {fav_ice} در رژیم دو-مثبت (+,+) Σ(1xxx) برابر حریف استراحت‌کرده"
+    elif (w_gf_f > w_gf_d) and (c_pwr_f > c_pwr_d) and (b2b_f and not b2b_d):
+        nobet_trap_code = "TR13"
+        nobet_trap_desc_fa = f"تله TR13 باکس ۱: خستگی B2B روی {fav_ice} همراه با شکست قطب سرد Σ(0xxx) برابر حریف استراحت‌کرده"
+
+    nobet_trap_hit = bool(nobet_trap_code)
+    nobet_route_pick = dog_ice if nobet_trap_hit else fav_ice
+    nobet_route_fa = (
+        f"🔄 چرخش مسیر بدون بت به {dog_ice} (ردِ {fav_ice} {p_fav_ice:.1f}% • {nobet_trap_desc_fa})"
+        if nobet_trap_hit
+        else f"مسیر پایه کفه یخ هاکی (Pyth {p_fav_ice:.1f}% • بدون تله باکس ۱): {fav_ice}"
+    )
 
     tm_meta = fm.get("team") or {}
     pl_meta = fm.get("player") or {}
@@ -1172,12 +1255,12 @@ def recompute_all_fusion_modes(g):
     p_sup_t15 = (ppk_15 == tpk_15) or (f30_p15 * sgn_t15 > 0)
     t_sup_p15 = (tpk_15 == ppk_15) or (f30_t15 * sgn_p15 > 0)
 
-    ice_fb_pick = h if ph_ice >= 55.0 else (a if (100.0 - ph_ice) >= 55.0 else pk_dp)
     m15_sig = False
     m15_vip = False
-    m15_pick = ice_fb_pick
+    m15_pick = nobet_route_pick
     m15_code = "ICE_HOLD"
-    m15_fa = f"بدون احراز قفل هاکی DEG1=88 • کفه یخ: {ice_fb_pick} ({ph_ice if ice_fb_pick == h else round(100.0 - ph_ice, 1)}%)"
+    m15_hold_prefix_fa = "بدون احراز قفل هاکی DEG1=88"
+    m15_fa = f"{m15_hold_prefix_fa} • {nobet_route_fa}"
 
     dia_m = fm["modes"]["diamond"]
     if dia_m["sig"]:
@@ -1217,16 +1300,20 @@ def recompute_all_fusion_modes(g):
             )
             if pel_15 in ("WATER", "EARTH"):
                 m15_code = "ICE_YIN_TRAP_HOLD"
-                m15_fa = f"مهار تله قطب سرد هاکی ({pel_15} برابر {oel_15}) • خروج از سیگنال"
+                m15_hold_prefix_fa = f"مهار تله قطب سرد هاکی ({pel_15} برابر {oel_15})"
+                m15_fa = f"{m15_hold_prefix_fa} • {nobet_route_fa}"
             elif p_dom_13_tie := (p_dom_15 == "TIE" or dual_water_13):
                 m15_code = "ICE_ELEM_TIE_HOLD"
-                m15_fa = "مهار تله برابری المنت ۱۳ موجودیت (TIE / ۲×WATER)"
+                m15_hold_prefix_fa = "مهار تله برابری المنت ۱۳ موجودیت (TIE / ۲×WATER)"
+                m15_fa = f"{m15_hold_prefix_fa} • {nobet_route_fa}"
             elif pb2b_15 and not ob2b_15 and p_ice_15 < 63.0:
                 m15_code = "ICE_B2B_FATIGUE_HOLD"
-                m15_fa = f"مهار تله خستگی Back-to-Back هاکی ({cand_15} • {p_ice_15:.1f}%)"
+                m15_hold_prefix_fa = f"مهار تله خستگی Back-to-Back هاکی ({cand_15} • {p_ice_15:.1f}%)"
+                m15_fa = f"{m15_hold_prefix_fa} • {nobet_route_fa}"
             elif p_ice_15 < (58.0 if ish_15 else 60.0):
                 m15_code = "ICE_PROB_HOLD"
-                m15_fa = f"زیر حد نصاب احتمال برد پیتاگورین هاکی ({p_ice_15:.1f}% < {'58%' if ish_15 else '60% میهمان'})"
+                m15_hold_prefix_fa = f"زیر حد نصاب احتمال برد پیتاگورین هاکی ({p_ice_15:.1f}% < {'58%' if ish_15 else '60% میهمان'})"
+                m15_fa = f"{m15_hold_prefix_fa} • {nobet_route_fa}"
             elif astro_ok_15 and (from_dp_15 or geo_elem_vote_15):
                 m15_sig = True
                 m15_pick = cand_15
@@ -1317,17 +1404,34 @@ def recompute_all_fusion_modes(g):
                     f"چرخش هوشمند حالت ۱۵ (Flip Guard) به {opp_fg} (ردِ {m15_orig_pick}): "
                     f"تله بن‌بست همزاد ۵۰٪ (3H-3A) با فیوژن نجومی مرزی (F30={f30_sum_fg:+d})"
                 )
+        elif (m15_pick == fav_ice) and (sig_trap_tr8 or sig_trap_tr9):
+            m15_flipped = True
+            m15_orig_pick = m15_pick
+            m15_pick = dog_ice
+            if sig_trap_tr8:
+                m15_flip_code = "ICE_FLIP_BIPOLAR_TR8"
+                m15_code = m15_flip_code
+                m15_fa = (
+                    f"چرخش هوشمند دوقطبی حالت ۱۵ (Flip Guard • TR8) به {dog_ice} (ردِ {m15_orig_pick}): "
+                    f"قطب سرد مثبت حریف ({c_pwr_d:+.1f} برابر {c_pwr_f:+.1f}) همراه با برتری عمیق اختلاف قطبین Δ(1xxx−0xxx) به سود {dog_ice} ({dp8_d:+.1f} < {dp8_f:+.1f})"
+                )
+            else:
+                m15_flip_code = "ICE_FLIP_COLD_DGF_TR9"
+                m15_code = m15_flip_code
+                m15_fa = (
+                    f"چرخش هوشمند دوقطبی حالت ۱۵ (Flip Guard • TR9) به {dog_ice} (ردِ {m15_orig_pick}): "
+                    f"مهار تله قطب سرد منفی با برتری ΔGF(1xxx−0xxx) حریف ({dg8_d:+.1f} < {dg8_f:+.1f}) در Pyth زیر ۵۸٪ ({p_fav_ice:.1f}%)"
+                )
 
-    fm["modes"]["nhl_ice_ultralock"] = {
-        "sig": m15_sig, "vip": m15_vip, "pick": m15_pick, "flipped": m15_flipped,
-    }
-
-    # Mode 16 (`nhl_anti_nobet`): Mode 15 Core + Yang Union Release + Rested Contender vs Yin Trap
+    # Mode 16 (`nhl_anti_nobet`): Mode 15 Core + Yang Union Release + Rested Contender vs Yin Trap + TR8 U TR9 Guard
     m16_sig = False
     m16_vip = False
-    m16_pick = m15_pick
-    m16_kind = "ICE_HOLD_NEUTRAL"
+    m16_pick = nobet_route_pick
+    m16_kind = f"ICE_NOBET_FLIP_{nobet_trap_code}" if nobet_trap_hit else "ICE_HOLD_NEUTRAL"
     m16_fa = m15_fa
+    m16_flipped = False
+    m16_orig_pick = m16_pick
+    m16_flip_code = ""
 
     if m15_sig:
         m16_sig = True
@@ -1335,6 +1439,9 @@ def recompute_all_fusion_modes(g):
         m16_pick = m15_pick
         m16_kind = "M15_CORE"
         m16_fa = f"سیگنال اصلی حالت ۱۵ تایید شد ({m15_fa})"
+        m16_flipped = m15_flipped
+        m16_orig_pick = m15_orig_pick
+        m16_flip_code = m15_flip_code
     elif not dual_water_13:
         if not (tu_15 and pu_15 and tpk_15 != ppk_15):
             uk_16 = tpk_15 if (tu_15 and p_sup_t15) else (ppk_15 if (pu_15 and t_sup_p15) else None)
@@ -1383,27 +1490,42 @@ def recompute_all_fusion_modes(g):
                     m16_kind = "CONTENDER_YIN_MISMATCH"
                     m16_fa = f"آزادسازی ضد NO-BET هاکی (گروه ۲): مدعی {pel_c16} برابر تله {oel_c16} + توافق دو همزاد ({p_ice_c16:.1f}%)"
 
+        if m16_sig and not dia_m["sig"] and (m16_pick == fav_ice) and (sig_trap_tr8 or sig_trap_tr9):
+            m16_flipped = True
+            m16_orig_pick = m16_pick
+            m16_pick = dog_ice
+            if sig_trap_tr8:
+                m16_flip_code = "ICE_FLIP_BIPOLAR_TR8"
+                m16_kind = "CONTENDER_FLIP_TR8" if m16_kind == "CONTENDER_YIN_MISMATCH" else "YANG_UNION_FLIP_TR8"
+                m16_fa = (
+                    f"چرخش هوشمند حالت ۱۶ (Flip Guard • TR8) به {dog_ice} (ردِ {m16_orig_pick}): "
+                    f"قطب سرد مثبت حریف ({c_pwr_d:+.1f} برابر {c_pwr_f:+.1f}) با برتری عمیق Δ(1xxx−0xxx) به سود {dog_ice} ({dp8_d:+.1f} < {dp8_f:+.1f})"
+                )
+            else:
+                m16_flip_code = "ICE_FLIP_COLD_DGF_TR9"
+                m16_kind = "YANG_UNION_FLIP_TR9"
+                m16_fa = (
+                    f"چرخش هوشمند حالت ۱۶ (Flip Guard • TR9) به {dog_ice} (ردِ {m16_orig_pick}): "
+                    f"مهار تله قطب سرد منفی با برتری ΔGF(1xxx−0xxx) حریف ({dg8_d:+.1f} < {dg8_f:+.1f}) در Pyth زیر ۵۸٪ ({p_fav_ice:.1f}%)"
+                )
+
+    # Align Mode 15 non-signal suggested route with Mode 16 verified route so all 3,150 routed games unify cleanly:
+    if (not m15_sig) and m16_sig:
+        m15_pick = m16_pick
+        if m16_flipped:
+            m15_fa = f"{m15_hold_prefix_fa} • 🔄 مسیر بدون بت هم‌راستا با چرخش هوشمند حالت ۱۶ ({m16_flip_code.split('_')[-1]}): {m16_pick} (ردِ {m16_orig_pick})"
+        else:
+            m15_fa = f"{m15_hold_prefix_fa} • مسیر بدون بت هم‌راستا با حالت ۱۶: {m16_pick}"
+
+    fm["modes"]["nhl_ice_ultralock"] = {
+        "sig": m15_sig, "vip": m15_vip, "pick": m15_pick, "flipped": m15_flipped,
+    }
     fm["modes"]["nhl_anti_nobet"] = {
-        "sig": m16_sig, "vip": m16_vip, "pick": m16_pick,
+        "sig": m16_sig, "vip": m16_vip, "pick": m16_pick, "flipped": m16_flipped,
         "kind": m16_kind, "reason_fa": m16_fa,
     }
-    h_w_gff8 = round(sum(float(p.get("gf_fin", 0.0)) for p in hp_list if str(p.get("gf", ""))[:1] == "1"), 1)
-    a_w_gff8 = round(sum(float(p.get("gf_fin", 0.0)) for p in ap_list if str(p.get("gf", ""))[:1] == "1"), 1)
-    h_c_gff8 = round(sum(float(p.get("gf_fin", 0.0)) for p in hp_list if str(p.get("gf", ""))[:1] == "0"), 1)
-    a_c_gff8 = round(sum(float(p.get("gf_fin", 0.0)) for p in ap_list if str(p.get("gf", ""))[:1] == "0"), 1)
-    h_d_pwr8 = round(h_sum - h_0xxx, 1)
-    a_d_pwr8 = round(a_sum - a_0xxx, 1)
-    h_d_gff8 = round(h_w_gff8 - h_c_gff8, 1)
-    a_d_gff8 = round(a_w_gff8 - a_c_gff8, 1)
-    h_tm_e = (t12_blk or {}).get("h_tm_ent") or {}
-    a_tm_e = (t12_blk or {}).get("a_tm_ent") or {}
-    h_tm_sgn = 1.0 if str(h_tm_e.get("gf", "0"))[:1] == "1" else -1.0
-    a_tm_sgn = 1.0 if str(a_tm_e.get("gf", "0"))[:1] == "1" else -1.0
-    h_d_pwr9 = round(h_d_pwr8 + h_tm_sgn * float(h_tm_e.get("pwr", 0.0)), 1)
-    a_d_pwr9 = round(a_d_pwr8 + a_tm_sgn * float(a_tm_e.get("pwr", 0.0)), 1)
-    h_d_gff9 = round(h_d_gff8 + h_tm_sgn * float(h_tm_e.get("gff", 0.0)), 1)
-    a_d_gff9 = round(a_d_gff8 + a_tm_sgn * float(a_tm_e.get("gff", 0.0)), 1)
 
+    eff_nobet_flipped = bool((not m16_sig) and nobet_trap_hit)
     fm["nhl_ice"] = {
         "ph_ice": ph_ice,
         "hel_ice": hel_ice,
@@ -1436,6 +1558,13 @@ def recompute_all_fusion_modes(g):
         "m15_flip_code": m15_flip_code,
         "m16_kind": m16_kind,
         "m16_reason_fa": m16_fa,
+        "m16_flipped": m16_flipped,
+        "m16_orig_pick": m16_orig_pick,
+        "m16_flip_code": m16_flip_code,
+        "nobet_flipped": eff_nobet_flipped,
+        "nobet_trap_code": nobet_trap_code if eff_nobet_flipped else "",
+        "nobet_orig_fav": fav_ice if eff_nobet_flipped else "",
+        "nobet_reason_fa": nobet_route_fa if (not m16_sig) else "",
     }
 
     in_ov_flag = bool(fm.get("in_auth_overlap", True))

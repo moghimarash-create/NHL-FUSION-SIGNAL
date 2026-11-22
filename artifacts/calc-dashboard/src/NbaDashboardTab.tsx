@@ -457,6 +457,13 @@ type NbaGamePred = {
       m15_flip_code?: string;
       m16_kind: string;
       m16_reason_fa: string;
+      m16_flipped?: boolean;
+      m16_orig_pick?: string;
+      m16_flip_code?: string;
+      nobet_flipped?: boolean;
+      nobet_trap_code?: string;
+      nobet_orig_fav?: string;
+      nobet_reason_fa?: string;
     };
   };
   ice_wtp?: {
@@ -885,7 +892,7 @@ const TWIN_PATTERN_DEFS: {
     key: "tall",
     titleFa: "۶. کل بازی‌های مسیر‌یابی‌شده با موتور جدید NHL (بدون حذف بازی)",
     titleEn: "All Routed NHL Games Under Active Engine (Zero-Drop)",
-    formulaFa: "نمایش برد و باخت تمام بازی‌های NHL بر اساس منتخب مستقیم یا مسیر برنده ضدحذف موتور تلفیقی فعال (۱xxx • Σ8 • GF-FIN • Σ3)",
+    formulaFa: "نمایش برد و باخت تمام ۳٬۱۵۰ بازی NHL بدون حذف هیچ بازی: سیگنال‌های رسمی با گارد دوقطبی (TR8∪TR9) + مسیریاب ضدتله باکس ۱ روی بازی‌های خارج از سیگنال (TR1∪TR2∪TR3∪TR5∪TR6∪TR7∪TR12∪TR13 روی Pyth≥50%)",
   },
 ];
 
@@ -3619,10 +3626,13 @@ export default function NbaDashboardTab({
                             ? g.fusion_meta?.nhl_ice?.m15_flipped
                               ? "🔄 حالت ۱۵: چرخش هوشمند Flip Guard"
                               : "🏒 حالت ۱۵: ابرقفل یخ DEG1=88"
-                            : g.fusion_meta?.nhl_ice?.m15_flipped && g.fusion_meta?.nhl_ice?.m16_kind === "M15_CORE"
+                            : g.fusion_meta?.nhl_ice?.m16_flipped ||
+                                (g.fusion_meta?.nhl_ice?.m15_flipped && g.fusion_meta?.nhl_ice?.m16_kind === "M15_CORE")
                               ? "🔄 حالت ۱۶: چرخش هوشمند Flip Guard"
                               : "🏒 حالت ۱۶: ضد NO-BET هاکی"
-                          : "— خارج از سیگنال هاکی DEG1=88"
+                          : g.fusion_meta?.nhl_ice?.nobet_flipped
+                            ? `🔄 چرخش تله ${g.fusion_meta.nhl_ice.nobet_trap_code || "باکس ۱"} (بدون بت)`
+                            : "— خارج از سیگنال هاکی DEG1=88"
                         : pickDualEarthHold
                           ? "⛔ رد تقابل دو EARTH"
                           : fusionMode === "total_elem_12"
@@ -5171,8 +5181,20 @@ export default function NbaDashboardTab({
                         (fusionMode === "pos_inv_lock" && g.fusion_meta?.geo1xxx?.pos_inv?.triggered) ||
                           (isTriAntiDropMode && activeRouteCardObj?.flipped) ||
                           (isNhlIceFamily &&
-                            g.fusion_meta?.nhl_ice?.m15_flipped &&
-                            (isNhlIceUltraMode || g.fusion_meta?.nhl_ice?.m16_kind === "M15_CORE"))
+                            (isNhlIceUltraMode
+                              ? Boolean(g.fusion_meta?.nhl_ice?.m15_flipped)
+                              : Boolean(
+                                  g.fusion_meta?.nhl_ice?.m16_flipped ||
+                                    (g.fusion_meta?.nhl_ice?.m15_flipped && g.fusion_meta?.nhl_ice?.m16_kind === "M15_CORE")
+                                )))
+                      );
+                      const nhlNoBetTrapFlipped = Boolean(
+                        isNhlIceFamily &&
+                          !isQualified &&
+                          (g.fusion_meta?.nhl_ice?.nobet_flipped ||
+                            (isNhlIceUltraMode &&
+                              g.fusion_meta?.modes?.nhl_anti_nobet?.sig &&
+                              g.fusion_meta?.nhl_ice?.m16_flipped))
                       );
                       const fmtHeroSigned = (v: number) => {
                         const r = Math.round(Number(v || 0) * 10) / 10;
@@ -5205,9 +5227,11 @@ export default function NbaDashboardTab({
                             ? "border-2 border-indigo-500 ring-2 ring-indigo-200/80 bg-white shadow-md"
                             : isQualified
                               ? "border-2 border-emerald-400 ring-1 ring-emerald-200 bg-white shadow-sm"
-                              : showLegacyChannelBoxes && (isFilteredOutByWeekly || isFilteredOutByTrap || isFilteredOutByIdx)
-                                ? "border border-amber-300 bg-slate-50/95"
-                                : "border border-slate-200 bg-slate-50/85";
+                              : nhlNoBetTrapFlipped
+                                ? "border border-indigo-300 bg-slate-50/95"
+                                : showLegacyChannelBoxes && (isFilteredOutByWeekly || isFilteredOutByTrap || isFilteredOutByIdx)
+                                  ? "border border-amber-300 bg-slate-50/95"
+                                  : "border border-slate-200 bg-slate-50/85";
 
                       const ribbonCls =
                         isVip3 && isQualified && !isVipMismatchRescue
@@ -5216,11 +5240,13 @@ export default function NbaDashboardTab({
                             ? "bg-gradient-to-r from-indigo-700 via-sky-700 to-emerald-700 text-white"
                             : isQualified
                               ? "bg-emerald-700 text-white"
-                              : showLegacyChannelBoxes && isIdxRescueOnly
-                                ? "bg-sky-100 text-sky-900 border-b border-sky-200"
-                                : showLegacyChannelBoxes && (isFilteredOutByWeekly || isFilteredOutByTrap || isFilteredOutByIdx)
-                                  ? "bg-amber-100/80 text-amber-950 border-b border-amber-200"
-                                  : "bg-slate-100 text-slate-600 border-b border-slate-200";
+                              : nhlNoBetTrapFlipped
+                                ? "bg-indigo-100/85 text-indigo-950 border-b border-indigo-200"
+                                : showLegacyChannelBoxes && isIdxRescueOnly
+                                  ? "bg-sky-100 text-sky-900 border-b border-sky-200"
+                                  : showLegacyChannelBoxes && (isFilteredOutByWeekly || isFilteredOutByTrap || isFilteredOutByIdx)
+                                    ? "bg-amber-100/80 text-amber-950 border-b border-amber-200"
+                                    : "bg-slate-100 text-slate-600 border-b border-slate-200";
 
                       const trapReasonShort = g.trap_tag || "تله درونی/B2B";
 
@@ -5235,9 +5261,13 @@ export default function NbaDashboardTab({
                               ? `⭐ سیگنال VIP ${activePresetLabel} (${wtpObj.matchElem} ${wtpObj.l5Pick}% • ≤${maxBuyCents}¢)`
                               : isQualified
                                 ? `✓ سیگنال فعال ${activePresetLabel} (${wtpObj.matchElem} ${wtpObj.l5Pick}% • ≤${maxBuyCents}¢)`
-                                : isTriAntiDropMode
-                                  ? `🧭 مسیر برنده بدون حذف (${predTeam === g.h ? g.hc : g.ac}) • ${activePresetLabel}`
-                                  : `خارج از سیگنال • ${activePresetLabel}`
+                                : nhlNoBetTrapFlipped
+                                  ? `🔄 مسیر بدون بت ضدتله باکس ۱ (${g.fusion_meta?.nhl_ice?.nobet_trap_code || g.fusion_meta?.nhl_ice?.m16_flip_code?.split("_").pop() || "TRAP"} → ${predTeam === g.h ? g.hc : g.ac}) • ${activePresetLabel}`
+                                  : isNhlIceFamily
+                                    ? `🧭 مسیر بدون بت کفه یخ (${predTeam === g.h ? g.hc : g.ac}) • ${activePresetLabel}`
+                                    : isTriAntiDropMode
+                                      ? `🧭 مسیر برنده بدون حذف (${predTeam === g.h ? g.hc : g.ac}) • ${activePresetLabel}`
+                                      : `خارج از سیگنال • ${activePresetLabel}`
                         : isVipMismatchRescue
                           ? "نجات VIP جدول (≤۵۲¢)"
                           : isQualified && wtpObj.matchElem === "FIRE"
@@ -6296,6 +6326,7 @@ export default function NbaDashboardTab({
 
                       const m15Code = nhlIceMeta?.m15_code ?? "";
                       const m16Kind = nhlIceMeta?.m16_kind ?? "";
+                      const nbTrapCode = nhlIceMeta?.nobet_trap_code ?? "";
                       const m15LockTitleMap: Record<string, string> = {
                         ICE_DIAMOND: "الماس دو موتور هاکی (T∩P • DEG1=88) + سپر یخ",
                         ICE_YANG_TWIN_LOCK: "ابرقفل هاکی DEG1=88: همزاد دو-ستونی + سپر FIRE/AIR + ۱ گلر و ۷ اسکیت‌باز",
@@ -6306,18 +6337,43 @@ export default function NbaDashboardTab({
                           "🔄 چرخش هوشمند حالت ۱۵ (Flip Guard): مهار بن‌بست همزاد ۵۰٪ (3H-3A) با فیوژن نجومی مرزی → برد تیم مقابل",
                         ICE_FLIP_POSPOLE_AND_TWIN50:
                           "🔄 چرخش هوشمند حالت ۱۵ (Flip Guard): مهار هم‌زمان تله دو-مثبت (+,+) ۱G+7S و همزاد ۵۰٪ مرزی → برد تیم مقابل",
-                        ICE_YIN_TRAP_HOLD: "توقف ایمنی هاکی: مهار تله قطب سرد (WATER / EARTH)",
-                        ICE_ELEM_TIE_HOLD: "توقف ایمنی هاکی: مهار برابری المنت کل (TIE / ۲×WATER)",
-                        ICE_B2B_FATIGUE_HOLD: "توقف ایمنی هاکی: مهار خستگی Back-to-Back بدون استراحت",
-                        ICE_PROB_HOLD: "خارج از حد نصاب احتمال برد پیتاگورین هاکی (۵۸٪ میزبان / ۶۰٪ میهمان)",
-                        ICE_HOLD: "مسیر پایه کفه یخ هاکی (بدون احراز شرایط ابرقفل حالت ۱۵)",
+                        ICE_FLIP_BIPOLAR_TR8:
+                          "🔄 چرخش هوشمند دوقطبی حالت ۱۵ (Flip Guard • TR8): قطب سرد مثبت حریف همراه با برتری عمیق Δ(1xxx−0xxx) → برد تیم مقابل",
+                        ICE_FLIP_COLD_DGF_TR9:
+                          "🔄 چرخش هوشمند دوقطبی حالت ۱۵ (Flip Guard • TR9): مهار تله قطب سرد منفی با برتری ΔGF(1xxx−0xxx) حریف زیر ۵۸٪ → برد تیم مقابل",
+                        ICE_YIN_TRAP_HOLD: nbTrapCode
+                          ? `توقف ایمنی قطب سرد (WATER/EARTH) + چرخش ضدتله باکس ۱ [${nbTrapCode}]`
+                          : "توقف ایمنی هاکی: مهار تله قطب سرد (WATER / EARTH)",
+                        ICE_ELEM_TIE_HOLD: nbTrapCode
+                          ? `توقف برابری المنت کل (TIE/۲×WATER) + چرخش ضدتله باکس ۱ [${nbTrapCode}]`
+                          : "توقف ایمنی هاکی: مهار برابری المنت کل (TIE / ۲×WATER)",
+                        ICE_B2B_FATIGUE_HOLD: nbTrapCode
+                          ? `توقف خستگی Back-to-Back + چرخش ضدتله باکس ۱ [${nbTrapCode}]`
+                          : "توقف ایمنی هاکی: مهار خستگی Back-to-Back بدون استراحت",
+                        ICE_PROB_HOLD: nbTrapCode
+                          ? `خارج از حد نصاب Pyth هاکی + چرخش ضدتله باکس ۱ [${nbTrapCode}]`
+                          : "خارج از حد نصاب احتمال برد پیتاگورین هاکی (۵۸٪ میزبان / ۶۰٪ میهمان)",
+                        ICE_HOLD: nbTrapCode
+                          ? `🔄 چرخش مسیر بدون بت باکس ۱ [${nbTrapCode}]: مهار تله Pyth≥50% → برد تیم مقابل`
+                          : "مسیر پایه کفه یخ هاکی (بدون احراز شرایط ابرقفل حالت ۱۵)",
                       };
                       const m16TitleMap: Record<string, string> = {
                         M15_CORE: m15LockTitleMap[m15Code] || "سیگنال اصلی حالت ۱۵ هاکی تایید شد",
                         YANG_UNION_RELEASE: "گروه ۱ ضد NO-BET هاکی: آزادسازی اتحاد همزاد با سپر FIRE/AIR",
                         CONTENDER_YIN_MISMATCH: "گروه ۲ ضد NO-BET هاکی: مدعی FIRE/AIR برابر تله سرد WATER/EARTH + توافق دو همزاد",
+                        YANG_UNION_FLIP_TR9:
+                          "🔄 چرخش هوشمند حالت ۱۶ (Flip Guard • TR9): مهار تله قطب سرد منفی با برتری ΔGF(1xxx−0xxx) حریف زیر ۵۸٪ → برد تیم مقابل",
+                        YANG_UNION_FLIP_TR8:
+                          "🔄 چرخش هوشمند حالت ۱۶ (Flip Guard • TR8): قطب سرد مثبت حریف همراه با برتری عمیق Δ(1xxx−0xxx) → برد تیم مقابل",
+                        CONTENDER_FLIP_TR8:
+                          "🔄 چرخش هوشمند حالت ۱۶ (Flip Guard • TR8): مهار واگرایی عمیق Δ(1xxx−0xxx) مدعی برابر قطب سرد مثبت حریف → برد تیم مقابل",
                         ICE_HOLD_NEUTRAL: m15LockTitleMap[m15Code] || "توقف خنثی ضد NO-BET هاکی (خارج از شرایط ایمن)",
                       };
+                      if (m16Kind.startsWith("ICE_NOBET_FLIP_") && !m16TitleMap[m16Kind]) {
+                        m16TitleMap[m16Kind] =
+                          m15LockTitleMap[m15Code] ||
+                          `🔄 چرخش مسیر بدون بت باکس ۱ [${nbTrapCode || m16Kind.replace("ICE_NOBET_FLIP_", "")}] → برد تیم مقابل`;
+                      }
 
                       const isSafetyHold = Boolean(
                         !isQualified &&
@@ -7453,18 +7509,22 @@ export default function NbaDashboardTab({
                                         ? "bg-amber-400 text-slate-950 border-amber-500"
                                         : isQualified
                                           ? "bg-emerald-600 text-white border-emerald-700"
-                                          : isSafetyHold
-                                            ? "bg-rose-600 text-white border-rose-700"
-                                            : "bg-slate-200 text-slate-700 border-slate-300"
+                                          : nhlNoBetTrapFlipped
+                                            ? "bg-indigo-600 text-white border-indigo-700"
+                                            : isSafetyHold
+                                              ? "bg-rose-600 text-white border-rose-700"
+                                              : "bg-slate-200 text-slate-700 border-slate-300"
                                     }`}
                                   >
                                     {isQualified && isVip3
                                       ? "★ سیگنال ویژه VIP"
                                       : isQualified
                                         ? "✓ سیگنال فعال"
-                                        : isSafetyHold
-                                          ? "⛔ مهار قفل ایمنی"
-                                          : "خارج از سیگنال"}
+                                        : nhlNoBetTrapFlipped
+                                          ? `🔄 چرخش تله ${nbTrapCode || nhlIceMeta?.m16_flip_code?.split("_").pop() || "باکس ۱"}`
+                                          : isSafetyHold
+                                            ? "⛔ مهار قفل ایمنی"
+                                            : "خارج از سیگنال"}
                                   </span>
                                   <span className="px-1.5 py-0.5 rounded bg-white border border-slate-300 text-slate-800 font-extrabold text-[9px]">
                                     {isBox2Open ? "بستن ▲" : "باز کردن ▼"}
@@ -7498,15 +7558,21 @@ export default function NbaDashboardTab({
                                     className={`rounded-md px-2.5 py-1.5 border flex flex-wrap items-center justify-between gap-1.5 ${
                                       isQualified
                                         ? "bg-emerald-100/80 border-emerald-400 text-emerald-950"
-                                        : "bg-sky-50/80 border-sky-200 text-slate-800"
+                                        : nhlNoBetTrapFlipped
+                                          ? "bg-indigo-50/90 border-indigo-300 text-indigo-950"
+                                          : "bg-sky-50/80 border-sky-200 text-slate-800"
                                     }`}
                                   >
                                     <span className="font-bold text-[10px] shrink-0">
                                       {isQualified
-                                        ? "پیش‌بینی نهایی سیگنال:"
-                                        : isTotalElem12Mode && sm14.kind === "M14_VETO_TRAP"
-                                          ? `مسیر جایگزین ضدتله (ردِ ${getTeam3Code(sm14.baseM14Pick)} • بدون بت):`
-                                          : "مسیر پیشنهادی (بدون بت):"}
+                                        ? posInvTriggeredCard && isNhlIceFamily
+                                          ? "پیش‌بینی نهایی سیگنال (چرخش Flip Guard):"
+                                          : "پیش‌بینی نهایی سیگنال:"
+                                        : nhlNoBetTrapFlipped
+                                          ? `🔄 مسیر ضدتله باکس ۱ (${nbTrapCode || nhlIceMeta?.m16_flip_code?.split("_").pop() || "TRAP"} • ردِ ${getTeam3Code(nhlIceMeta?.nobet_orig_fav || nhlIceMeta?.m16_orig_pick || "")} • بدون بت):`
+                                          : isTotalElem12Mode && sm14.kind === "M14_VETO_TRAP"
+                                            ? `مسیر جایگزین ضدتله (ردِ ${getTeam3Code(sm14.baseM14Pick)} • بدون بت):`
+                                            : "مسیر پیشنهادی (بدون بت):"}
                                     </span>
                                     <span className="inline-flex items-center gap-1.5 font-extrabold text-xs">
                                       <bdi dir="ltr">{predTeam}</bdi>
