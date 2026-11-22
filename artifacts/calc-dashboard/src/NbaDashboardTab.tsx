@@ -5875,10 +5875,10 @@ export default function NbaDashboardTab({
                               : "۱ گلر + ۷ اسکیت‌باز TOI • واگرایی قطب گرم و سرد"
                             : "۱ گلر + ۷ اسکیت‌باز TOI (مقایسه با +تیم)",
                         hText: fmtSigned(hDeltaPwr8),
-                        hSub: `ΔGF:${fmtSigned(hDeltaGf8)} • +تیم:${fmtSigned(hDeltaPwr9)}`,
+                        hSub: `ΔGF:${fmtSigned(hDeltaGf8)} • +Tm:${fmtSigned(hDeltaPwr9)}`,
                         hTick: nhlDelta8Win === g.h ? "pass" : "none",
                         aText: fmtSigned(aDeltaPwr8),
-                        aSub: `ΔGF:${fmtSigned(aDeltaGf8)} • +تیم:${fmtSigned(aDeltaPwr9)}`,
+                        aSub: `ΔGF:${fmtSigned(aDeltaGf8)} • +Tm:${fmtSigned(aDeltaPwr9)}`,
                         aTick: nhlDelta8Win === g.a ? "pass" : "none",
                       };
 
