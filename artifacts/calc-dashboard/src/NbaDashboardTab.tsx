@@ -464,6 +464,8 @@ type NbaGamePred = {
       nobet_trap_code?: string;
       nobet_orig_fav?: string;
       nobet_reason_fa?: string;
+      combo_h?: number;
+      combo_a?: number;
     };
   };
   ice_wtp?: {
@@ -892,7 +894,7 @@ const TWIN_PATTERN_DEFS: {
     key: "tall",
     titleFa: "۶. کل بازی‌های مسیر‌یابی‌شده با موتور جدید NHL (بدون حذف بازی)",
     titleEn: "All Routed NHL Games Under Active Engine (Zero-Drop)",
-    formulaFa: "نمایش برد و باخت تمام ۳٬۱۵۰ بازی NHL بدون حذف هیچ بازی: سیگنال‌های رسمی با گارد دوقطبی (TR8∪TR9) + مسیریاب ضدتله باکس ۱ روی بازی‌های خارج از سیگنال (TR1∪TR2∪TR3∪TR5∪TR6∪TR7∪TR12∪TR13 روی Pyth≥50%)",
+    formulaFa: "نمایش برد و باخت تمام ۳٬۱۵۰ بازی NHL بدون حذف هیچ بازی: سیگنال‌های رسمی با گارد دوقطبی (TR8∪TR9) + مسیریاب ضدتله باکس ۱ روی بازی‌های خارج از سیگنال (TR1..TR13 ∪ EC1..EC4: مجموع EARTH + Pyth% کوچک‌تر)",
   },
 ];
 
@@ -6327,6 +6329,10 @@ export default function NbaDashboardTab({
                       const m15Code = nhlIceMeta?.m15_code ?? "";
                       const m16Kind = nhlIceMeta?.m16_kind ?? "";
                       const nbTrapCode = nhlIceMeta?.nobet_trap_code ?? "";
+                      const isEcTrap = nbTrapCode.startsWith("EC");
+                      const nbTrapBadgeLabel = isEcTrap
+                        ? `چرخش تله ${nbTrapCode} (مجموع EARTH+Pyth% کوچک‌تر)`
+                        : `چرخش ضدتله باکس ۱ [${nbTrapCode}]`;
                       const m15LockTitleMap: Record<string, string> = {
                         ICE_DIAMOND: "الماس دو موتور هاکی (T∩P • DEG1=88) + سپر یخ",
                         ICE_YANG_TWIN_LOCK: "ابرقفل هاکی DEG1=88: همزاد دو-ستونی + سپر FIRE/AIR + ۱ گلر و ۷ اسکیت‌باز",
@@ -6342,19 +6348,21 @@ export default function NbaDashboardTab({
                         ICE_FLIP_COLD_DGF_TR9:
                           "🔄 چرخش هوشمند دوقطبی حالت ۱۵ (Flip Guard • TR9): مهار تله قطب سرد منفی با برتری ΔGF(1xxx−0xxx) حریف زیر ۵۸٪ → برد تیم مقابل",
                         ICE_YIN_TRAP_HOLD: nbTrapCode
-                          ? `توقف ایمنی قطب سرد (WATER/EARTH) + چرخش ضدتله باکس ۱ [${nbTrapCode}]`
+                          ? `توقف ایمنی قطب سرد (WATER/EARTH) + 🔄 ${nbTrapBadgeLabel}`
                           : "توقف ایمنی هاکی: مهار تله قطب سرد (WATER / EARTH)",
                         ICE_ELEM_TIE_HOLD: nbTrapCode
-                          ? `توقف برابری المنت کل (TIE/۲×WATER) + چرخش ضدتله باکس ۱ [${nbTrapCode}]`
+                          ? `توقف برابری المنت کل (TIE/۲×WATER) + 🔄 ${nbTrapBadgeLabel}`
                           : "توقف ایمنی هاکی: مهار برابری المنت کل (TIE / ۲×WATER)",
                         ICE_B2B_FATIGUE_HOLD: nbTrapCode
-                          ? `توقف خستگی Back-to-Back + چرخش ضدتله باکس ۱ [${nbTrapCode}]`
+                          ? `توقف خستگی Back-to-Back + 🔄 ${nbTrapBadgeLabel}`
                           : "توقف ایمنی هاکی: مهار خستگی Back-to-Back بدون استراحت",
                         ICE_PROB_HOLD: nbTrapCode
-                          ? `خارج از حد نصاب Pyth هاکی + چرخش ضدتله باکس ۱ [${nbTrapCode}]`
+                          ? `خارج از حد نصاب Pyth هاکی + 🔄 ${nbTrapBadgeLabel}`
                           : "خارج از حد نصاب احتمال برد پیتاگورین هاکی (۵۸٪ میزبان / ۶۰٪ میهمان)",
                         ICE_HOLD: nbTrapCode
-                          ? `🔄 چرخش مسیر بدون بت باکس ۱ [${nbTrapCode}]: مهار تله Pyth≥50% → برد تیم مقابل`
+                          ? isEcTrap
+                            ? `🔄 چرخش تله ${nbTrapCode} (مجموع EARTH + Pyth% کوچک‌تر) → برد تیم کوچک‌تر`
+                            : `🔄 چرخش مسیر بدون بت باکس ۱ [${nbTrapCode}]: مهار تله Pyth≥50% → برد تیم مقابل`
                           : "مسیر پایه کفه یخ هاکی (بدون احراز شرایط ابرقفل حالت ۱۵)",
                       };
                       const m16TitleMap: Record<string, string> = {
@@ -6372,7 +6380,7 @@ export default function NbaDashboardTab({
                       if (m16Kind.startsWith("ICE_NOBET_FLIP_") && !m16TitleMap[m16Kind]) {
                         m16TitleMap[m16Kind] =
                           m15LockTitleMap[m15Code] ||
-                          `🔄 چرخش مسیر بدون بت باکس ۱ [${nbTrapCode || m16Kind.replace("ICE_NOBET_FLIP_", "")}] → برد تیم مقابل`;
+                          `🔄 ${nbTrapBadgeLabel} → برد تیم مقابل`;
                       }
 
                       const isSafetyHold = Boolean(
@@ -7521,7 +7529,9 @@ export default function NbaDashboardTab({
                                       : isQualified
                                         ? "✓ سیگنال فعال"
                                         : nhlNoBetTrapFlipped
-                                          ? `🔄 چرخش تله ${nbTrapCode || nhlIceMeta?.m16_flip_code?.split("_").pop() || "باکس ۱"}`
+                                          ? isEcTrap
+                                            ? `🔄 چرخش تله ${nbTrapCode} (EARTH+Pyth)`
+                                            : `🔄 چرخش تله ${nbTrapCode || nhlIceMeta?.m16_flip_code?.split("_").pop() || "باکس ۱"}`
                                           : isSafetyHold
                                             ? "⛔ مهار قفل ایمنی"
                                             : "خارج از سیگنال"}
@@ -7569,7 +7579,9 @@ export default function NbaDashboardTab({
                                           ? "پیش‌بینی نهایی سیگنال (چرخش Flip Guard):"
                                           : "پیش‌بینی نهایی سیگنال:"
                                         : nhlNoBetTrapFlipped
-                                          ? `🔄 مسیر ضدتله باکس ۱ (${nbTrapCode || nhlIceMeta?.m16_flip_code?.split("_").pop() || "TRAP"} • ردِ ${getTeam3Code(nhlIceMeta?.nobet_orig_fav || nhlIceMeta?.m16_orig_pick || "")} • بدون بت):`
+                                          ? isEcTrap
+                                            ? `🔄 چرخش تله ${nbTrapCode} (مجموع EARTH+Pyth% کوچک‌تر • ردِ ${getTeam3Code(nhlIceMeta?.nobet_orig_fav || "")} • بدون بت):`
+                                            : `🔄 مسیر ضدتله باکس ۱ (${nbTrapCode || nhlIceMeta?.m16_flip_code?.split("_").pop() || "TRAP"} • ردِ ${getTeam3Code(nhlIceMeta?.nobet_orig_fav || nhlIceMeta?.m16_orig_pick || "")} • بدون بت):`
                                           : isTotalElem12Mode && sm14.kind === "M14_VETO_TRAP"
                                             ? `مسیر جایگزین ضدتله (ردِ ${getTeam3Code(sm14.baseM14Pick)} • بدون بت):`
                                             : "مسیر پیشنهادی (بدون بت):"}

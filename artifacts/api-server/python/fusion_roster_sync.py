@@ -1206,6 +1206,19 @@ def recompute_all_fusion_modes(g):
     sig_trap_tr8 = bool((w_pwr_f < 0.0) and (c_pwr_f < 0.0 and c_pwr_d > 0.0) and (dp8_f > dp8_d))
     sig_trap_tr9 = bool((c_pwr_f < c_pwr_d) and (dg8_f > dg8_d) and (p_fav_ice < 58.0))
 
+    tm_meta = fm.get("team") or {}
+    pl_meta = fm.get("player") or {}
+    tpk_15 = norm_team(tm_meta.get("pick") or h)
+    ppk_15 = norm_team(pl_meta.get("pick") or h)
+    f30_t15 = int(tm_meta.get("f30") or 0)
+    f30_p15 = int(pl_meta.get("f30") or 0)
+    tu_15 = bool(tm_meta.get("union", tm_meta.get("sig", False)))
+    pu_15 = bool(pl_meta.get("union", pl_meta.get("sig", False)))
+    sgn_t15 = 1 if tpk_15 == h else -1
+    sgn_p15 = 1 if ppk_15 == h else -1
+    p_sup_t15 = (ppk_15 == tpk_15) or (f30_p15 * sgn_t15 > 0)
+    t_sup_p15 = (tpk_15 == ppk_15) or (f30_t15 * sgn_p15 > 0)
+
     # 8 Core 3-Season Box-1 Traps (TR1 U TR2 U TR3 U TR5 U TR6 U TR7 U TR12 U TR13) for !M16 Non-Bet Routing:
     nobet_trap_code = ""
     nobet_trap_desc_fa = ""
@@ -1234,26 +1247,81 @@ def recompute_all_fusion_modes(g):
         nobet_trap_code = "TR13"
         nobet_trap_desc_fa = f"تله TR13 باکس ۱: خستگی B2B روی {fav_ice} همراه با شکست قطب سرد Σ(0xxx) برابر حریف استراحت‌کرده"
 
-    nobet_trap_hit = bool(nobet_trap_code)
-    nobet_route_pick = dog_ice if nobet_trap_hit else fav_ice
-    nobet_route_fa = (
-        f"🔄 چرخش مسیر بدون بت به {dog_ice} (ردِ {fav_ice} {p_fav_ice:.1f}% • {nobet_trap_desc_fa})"
-        if nobet_trap_hit
-        else f"مسیر پایه کفه یخ هاکی (Pyth {p_fav_ice:.1f}% • بدون تله باکس ۱): {fav_ice}"
-    )
+    # 4 Dual-EARTH `Score_Combo = Dom_Elem_Count + Pyth%` 3-Season Rules (EC1 U EC2 U EC3 U EC4) for !M16 Non-Bet Routing:
+    pa_ice = round(100.0 - ph_ice, 1)
+    h_max_dom = int(max(h_ef_v4)) if len(h_ef_v4) == 4 else 0
+    a_max_dom = int(max(a_ef_v4)) if len(a_ef_v4) == 4 else 0
+    combo_h_ec = round(h_max_dom + ph_ice, 1)
+    combo_a_ec = round(a_max_dom + pa_ice, 1)
+    if combo_h_ec < combo_a_ec:
+        sml_ec, big_ec = h, a
+    elif combo_a_ec < combo_h_ec:
+        sml_ec, big_ec = a, h
+    else:
+        sml_ec, big_ec = dog_ice, fav_ice
+    sml_is_h_ec = (sml_ec == h)
+    combo_sml_ec = combo_h_ec if sml_is_h_ec else combo_a_ec
+    combo_big_ec = combo_a_ec if sml_is_h_ec else combo_h_ec
+    combo_gap_ec = round(combo_big_ec - combo_sml_ec, 1)
 
-    tm_meta = fm.get("team") or {}
-    pl_meta = fm.get("player") or {}
-    tpk_15 = norm_team(tm_meta.get("pick") or h)
-    ppk_15 = norm_team(pl_meta.get("pick") or h)
-    f30_t15 = int(tm_meta.get("f30") or 0)
-    f30_p15 = int(pl_meta.get("f30") or 0)
-    tu_15 = bool(tm_meta.get("union", tm_meta.get("sig", False)))
-    pu_15 = bool(pl_meta.get("union", pl_meta.get("sig", False)))
-    sgn_t15 = 1 if tpk_15 == h else -1
-    sgn_p15 = 1 if ppk_15 == h else -1
-    p_sup_t15 = (ppk_15 == tpk_15) or (f30_p15 * sgn_t15 > 0)
-    t_sup_p15 = (tpk_15 == ppk_15) or (f30_t15 * sgn_p15 > 0)
+    def _sb_ec(vh, va):
+        return (vh, va) if sml_is_h_ec else (va, vh)
+
+    p_sml_ec, p_big_ec     = _sb_ec(ph_ice, pa_ice)
+    max_sml_ec, max_big_ec = _sb_ec(h_max_dom, a_max_dom)
+    w_sml_ec, w_big_ec     = _sb_ec(h_sum, a_sum)
+    cgf_sml_ec, cgf_big_ec = _sb_ec(h_c_gff8, a_c_gff8)
+    dg8_sml_ec, dg8_big_ec = _sb_ec(h_d_gff8, a_d_gff8)
+    dp9_sml_ec, dp9_big_ec = _sb_ec(h_d_pwr9, a_d_pwr9)
+    tw_both_sml_ec = (tpk_15 == sml_ec) and (ppk_15 == sml_ec)
+    tw_any_sig_sml_ec = (bool(tm_meta.get("sig")) and tpk_15 == sml_ec) or (bool(pl_meta.get("sig")) and ppk_15 == sml_ec)
+
+    is_r2_ice2e = (hel_ice == "EARTH" and ael_ice == "EARTH")
+    is_r3_dom2e = (h_dom13 == "EARTH" and a_dom13 == "EARTH")
+
+    ec_code = ""
+    ec_desc_fa = ""
+    if is_r2_ice2e and (combo_gap_ec >= 10.0) and (w_sml_ec < 0.0 and w_big_ec < 0.0) and (cgf_sml_ec > cgf_big_ec):
+        ec_code = "EC1"
+        ec_desc_fa = (
+            f"تله EC1 دو-EARTH یخ: مجموع EARTH+Pyth% کوچک‌تر ({combo_sml_ec:.1f} برابر {combo_big_ec:.1f} • شکاف {combo_gap_ec:.1f}) "
+            f"+ هر دو ۱xxx منفی + برتری GF قطب سرد ({cgf_sml_ec:+.1f}v{cgf_big_ec:+.1f})"
+        )
+    elif is_r3_dom2e and (p_big_ec < 55.0) and (combo_gap_ec >= 10.0) and (dp9_sml_ec < dp9_big_ec):
+        ec_code = "EC2"
+        ec_desc_fa = (
+            f"تله EC2 دو-EARTH غالب: مجموع EARTH+Pyth% کوچک‌تر ({combo_sml_ec:.1f} برابر {combo_big_ec:.1f}) "
+            f"در Pyth مرزی ({p_big_ec:.1f}%) + برتری بردار +Tm ({dp9_sml_ec:+.1f}v{dp9_big_ec:+.1f})"
+        )
+    elif is_r3_dom2e and ((max_big_ec - max_sml_ec) >= 3) and ((dg8_big_ec - dg8_sml_ec) >= 5.0) and tw_both_sml_ec:
+        ec_code = "EC3"
+        ec_desc_fa = (
+            f"تله EC3 اضافه‌بار EARTH ({max_sml_ec}v{max_big_ec} • مجموع {combo_sml_ec:.1f}<{combo_big_ec:.1f}) "
+            f"+ شکاف ΔGF ({dg8_sml_ec:+.1f}v{dg8_big_ec:+.1f}) + توافق دو همزاد T و P"
+        )
+    elif is_r3_dom2e and (dp9_sml_ec < dp9_big_ec) and tw_any_sig_sml_ec:
+        ec_code = "EC4"
+        ec_desc_fa = (
+            f"تله EC4 دو-EARTH غالب: مجموع EARTH+Pyth% کوچک‌تر ({combo_sml_ec:.1f}<{combo_big_ec:.1f}) "
+            f"+ برتری بردار +Tm ({dp9_sml_ec:+.1f}v{dp9_big_ec:+.1f}) + سیگنال همزاد به سود {sml_ec}"
+        )
+
+    if ec_code:
+        nobet_trap_code = ec_code
+        nobet_trap_desc_fa = ec_desc_fa
+        nobet_trap_hit = True
+        nobet_route_pick = sml_ec
+        nobet_orig_rejected = big_ec
+        nobet_route_fa = f"🔄 چرخش مسیر بدون بت به {sml_ec} (ردِ {big_ec} • {ec_desc_fa})"
+    else:
+        nobet_trap_hit = bool(nobet_trap_code)
+        nobet_route_pick = dog_ice if nobet_trap_hit else fav_ice
+        nobet_orig_rejected = fav_ice
+        nobet_route_fa = (
+            f"🔄 چرخش مسیر بدون بت به {dog_ice} (ردِ {fav_ice} {p_fav_ice:.1f}% • {nobet_trap_desc_fa})"
+            if nobet_trap_hit
+            else f"مسیر پایه کفه یخ هاکی (Pyth {p_fav_ice:.1f}% • بدون تله باکس ۱): {fav_ice}"
+        )
 
     m15_sig = False
     m15_vip = False
@@ -1563,8 +1631,10 @@ def recompute_all_fusion_modes(g):
         "m16_flip_code": m16_flip_code,
         "nobet_flipped": eff_nobet_flipped,
         "nobet_trap_code": nobet_trap_code if eff_nobet_flipped else "",
-        "nobet_orig_fav": fav_ice if eff_nobet_flipped else "",
+        "nobet_orig_fav": nobet_orig_rejected if eff_nobet_flipped else "",
         "nobet_reason_fa": nobet_route_fa if (not m16_sig) else "",
+        "combo_h": combo_h_ec,
+        "combo_a": combo_a_ec,
     }
 
     in_ov_flag = bool(fm.get("in_auth_overlap", True))
