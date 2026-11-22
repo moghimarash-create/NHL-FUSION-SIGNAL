@@ -1387,6 +1387,23 @@ def recompute_all_fusion_modes(g):
         "sig": m16_sig, "vip": m16_vip, "pick": m16_pick,
         "kind": m16_kind, "reason_fa": m16_fa,
     }
+    h_w_gff8 = round(sum(float(p.get("gf_fin", 0.0)) for p in hp_list if str(p.get("gf", ""))[:1] == "1"), 1)
+    a_w_gff8 = round(sum(float(p.get("gf_fin", 0.0)) for p in ap_list if str(p.get("gf", ""))[:1] == "1"), 1)
+    h_c_gff8 = round(sum(float(p.get("gf_fin", 0.0)) for p in hp_list if str(p.get("gf", ""))[:1] == "0"), 1)
+    a_c_gff8 = round(sum(float(p.get("gf_fin", 0.0)) for p in ap_list if str(p.get("gf", ""))[:1] == "0"), 1)
+    h_d_pwr8 = round(h_sum - h_0xxx, 1)
+    a_d_pwr8 = round(a_sum - a_0xxx, 1)
+    h_d_gff8 = round(h_w_gff8 - h_c_gff8, 1)
+    a_d_gff8 = round(a_w_gff8 - a_c_gff8, 1)
+    h_tm_e = (t12_blk or {}).get("h_tm_ent") or {}
+    a_tm_e = (t12_blk or {}).get("a_tm_ent") or {}
+    h_tm_sgn = 1.0 if str(h_tm_e.get("gf", "0"))[:1] == "1" else -1.0
+    a_tm_sgn = 1.0 if str(a_tm_e.get("gf", "0"))[:1] == "1" else -1.0
+    h_d_pwr9 = round(h_d_pwr8 + h_tm_sgn * float(h_tm_e.get("pwr", 0.0)), 1)
+    a_d_pwr9 = round(a_d_pwr8 + a_tm_sgn * float(a_tm_e.get("pwr", 0.0)), 1)
+    h_d_gff9 = round(h_d_gff8 + h_tm_sgn * float(h_tm_e.get("gff", 0.0)), 1)
+    a_d_gff9 = round(a_d_gff8 + a_tm_sgn * float(a_tm_e.get("gff", 0.0)), 1)
+
     fm["nhl_ice"] = {
         "ph_ice": ph_ice,
         "hel_ice": hel_ice,
@@ -1400,6 +1417,18 @@ def recompute_all_fusion_modes(g):
         "dual_water": dual_water_13,
         "h_wt_pwr": h_wt_15,
         "a_wt_pwr": a_wt_15,
+        "h_w_gff8": h_w_gff8,
+        "a_w_gff8": a_w_gff8,
+        "h_c_gff8": h_c_gff8,
+        "a_c_gff8": a_c_gff8,
+        "h_d_pwr8": h_d_pwr8,
+        "a_d_pwr8": a_d_pwr8,
+        "h_d_gff8": h_d_gff8,
+        "a_d_gff8": a_d_gff8,
+        "h_d_pwr9": h_d_pwr9,
+        "a_d_pwr9": a_d_pwr9,
+        "h_d_gff9": h_d_gff9,
+        "a_d_gff9": a_d_gff9,
         "m15_code": m15_code,
         "m15_reason_fa": m15_fa,
         "m15_flipped": m15_flipped,

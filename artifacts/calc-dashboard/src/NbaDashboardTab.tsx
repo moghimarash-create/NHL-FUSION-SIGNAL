@@ -438,6 +438,18 @@ type NbaGamePred = {
       dual_water: boolean;
       h_wt_pwr?: number;
       a_wt_pwr?: number;
+      h_w_gff8?: number;
+      a_w_gff8?: number;
+      h_c_gff8?: number;
+      a_c_gff8?: number;
+      h_d_pwr8?: number;
+      a_d_pwr8?: number;
+      h_d_gff8?: number;
+      a_d_gff8?: number;
+      h_d_pwr9?: number;
+      a_d_pwr9?: number;
+      h_d_gff9?: number;
+      a_d_gff9?: number;
       m15_code: string;
       m15_reason_fa: string;
       m15_flipped?: boolean;
@@ -2129,7 +2141,7 @@ export default function NbaDashboardTab({
   const [showMonthlyTable, setShowMonthlyTable] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
   const PAGE_SIZE = 30;
-  const MASTER_DATA_VERSION = "v83_fg1";
+  const MASTER_DATA_VERSION = "v83_fg2";
 
   useEffect(() => {
     let cancelled = false;
@@ -5756,10 +5768,132 @@ export default function NbaDashboardTab({
                             : "none",
                       };
 
+                      const calcPoleGfSum8 = (plist: typeof hpList, bit: "1" | "0") => {
+                        let s = 0;
+                        for (const p of plist) {
+                          const gfS = String(p.gf || "");
+                          if (gfS.slice(0, 1) !== bit) continue;
+                          if (typeof (p as any).gf_fin === "number") {
+                            s += Number((p as any).gf_fin);
+                          } else {
+                            const efArr = String(p.ef || "0-0-0-0")
+                              .split("-")
+                              .slice(0, 4)
+                              .map((v) => Number(v) || 0);
+                            while (efArr.length < 4) efArr.push(0);
+                            const bArr = (gfS.length === 4 ? gfS : "0000").split("").map((c) => (c === "1" ? 1 : 0));
+                            s +=
+                              (8 * (2 * bArr[0] - 1) * efArr[0] +
+                                4 * (2 * bArr[1] - 1) * efArr[1] +
+                                2 * (2 * bArr[2] - 1) * efArr[2] +
+                                (2 * bArr[3] - 1) * efArr[3]) /
+                              10;
+                          }
+                        }
+                        return Math.round(s * 10) / 10;
+                      };
+                      const hWarmGf8 =
+                        typeof nhlIceMeta?.h_w_gff8 === "number" ? nhlIceMeta.h_w_gff8 : calcPoleGfSum8(hpList, "1");
+                      const aWarmGf8 =
+                        typeof nhlIceMeta?.a_w_gff8 === "number" ? nhlIceMeta.a_w_gff8 : calcPoleGfSum8(apList, "1");
+                      const hColdGf8 =
+                        typeof nhlIceMeta?.h_c_gff8 === "number" ? nhlIceMeta.h_c_gff8 : calcPoleGfSum8(hpList, "0");
+                      const aColdGf8 =
+                        typeof nhlIceMeta?.a_c_gff8 === "number" ? nhlIceMeta.a_c_gff8 : calcPoleGfSum8(apList, "0");
+                      const hDeltaPwr8 =
+                        typeof nhlIceMeta?.h_d_pwr8 === "number"
+                          ? nhlIceMeta.h_d_pwr8
+                          : Math.round((g1.h_sum - h0Val) * 10) / 10;
+                      const aDeltaPwr8 =
+                        typeof nhlIceMeta?.a_d_pwr8 === "number"
+                          ? nhlIceMeta.a_d_pwr8
+                          : Math.round((g1.a_sum - a0Val) * 10) / 10;
+                      const hDeltaGf8 =
+                        typeof nhlIceMeta?.h_d_gff8 === "number"
+                          ? nhlIceMeta.h_d_gff8
+                          : Math.round((hWarmGf8 - hColdGf8) * 10) / 10;
+                      const aDeltaGf8 =
+                        typeof nhlIceMeta?.a_d_gff8 === "number"
+                          ? nhlIceMeta.a_d_gff8
+                          : Math.round((aWarmGf8 - aColdGf8) * 10) / 10;
+                      const hTmSgn9 = String(t12?.h_tm_ent?.gf || "0").slice(0, 1) === "1" ? 1 : -1;
+                      const aTmSgn9 = String(t12?.a_tm_ent?.gf || "0").slice(0, 1) === "1" ? 1 : -1;
+                      const hDeltaPwr9 =
+                        typeof nhlIceMeta?.h_d_pwr9 === "number"
+                          ? nhlIceMeta.h_d_pwr9
+                          : Math.round((hDeltaPwr8 + hTmSgn9 * Number(t12?.h_tm_ent?.pwr ?? 0)) * 10) / 10;
+                      const aDeltaPwr9 =
+                        typeof nhlIceMeta?.a_d_pwr9 === "number"
+                          ? nhlIceMeta.a_d_pwr9
+                          : Math.round((aDeltaPwr8 + aTmSgn9 * Number(t12?.a_tm_ent?.pwr ?? 0)) * 10) / 10;
+                      const nhlWarm8Win = g1.h_sum < g1.a_sum ? g.h : g1.a_sum < g1.h_sum ? g.a : "";
+                      const nhlDelta8Win =
+                        hDeltaPwr8 < aDeltaPwr8 ? g.h : aDeltaPwr8 < hDeltaPwr8 ? g.a : "";
+
+                      const rowNhlWarm8: CheckRow = {
+                        key: "nhl_warm8",
+                        testId: `row-nhl-warm8-${g.n}`,
+                        stepTitle: "قطب گرم Σ(1xxx) (۱ گلر + ۷ اسکیت‌باز TOI)",
+                        stepSub:
+                          nhlIceMeta?.m15_flipped && nhlIceMeta?.m15_flip_code?.includes("POSPOLE")
+                            ? "چرخش هوشمند Flip Guard در دو-مثبت (+,+)"
+                            : g1.pos_inv?.both_pos
+                              ? "رژیم دو-مثبت (+,+) در لیست ۸ نفره"
+                              : "جمع Pwr و GF شکل‌های ۱xxx لیست خالص ۸ نفره",
+                        hText: `${fmtSigned(g1.h_sum)} (${g1.h_cnt}/8)`,
+                        hSub: `GF:${fmtSigned(hWarmGf8)}${g1.h_cnt === 0 ? " • حبس ۰xxx" : ""}`,
+                        hTick: g1.h_cnt === 0 ? "trap" : nhlWarm8Win === g.h ? "pass" : "none",
+                        aText: `${fmtSigned(g1.a_sum)} (${g1.a_cnt}/8)`,
+                        aSub: `GF:${fmtSigned(aWarmGf8)}${g1.a_cnt === 0 ? " • حبس ۰xxx" : ""}`,
+                        aTick: g1.a_cnt === 0 ? "trap" : nhlWarm8Win === g.a ? "pass" : "none",
+                      };
+
+                      const rowNhlCold8: CheckRow = {
+                        key: "nhl_cold8",
+                        testId: `row-nhl-cold8-${g.n}`,
+                        stepTitle: "قطب سرد Σ(0xxx) (۱ گلر + ۷ اسکیت‌باز TOI)",
+                        stepSub:
+                          h0011Cnt > 0 || a0011Cnt > 0
+                            ? "جمع Pwr و GF شکل‌های ۰xxx + کد سرد 0011"
+                            : "جمع Pwr و GF شکل‌های ۰xxx لیست خالص ۸ نفره",
+                        hText: `${fmtSigned(h0Val)} (${h0Cnt}/8)`,
+                        hSub: `GF:${fmtSigned(hColdGf8)}${h0011Cnt > 0 ? ` • 0011:${fmtSigned(h0011Val)}(${h0011Cnt})` : ""}`,
+                        hTick: cold0Win === g.h ? "pass" : "none",
+                        aText: `${fmtSigned(a0Val)} (${a0Cnt}/8)`,
+                        aSub: `GF:${fmtSigned(aColdGf8)}${a0011Cnt > 0 ? ` • 0011:${fmtSigned(a0011Val)}(${a0011Cnt})` : ""}`,
+                        aTick: cold0Win === g.a ? "pass" : "none",
+                      };
+
+                      const rowNhlDelta8: CheckRow = {
+                        key: "nhl_delta8",
+                        testId: `row-nhl-delta8-${g.n}`,
+                        stepTitle: "تفاضل دو قطب / اختلاف قطبین Δ(1xxx−0xxx)",
+                        stepSub:
+                          nhlWarm8Win && cold0Win
+                            ? nhlWarm8Win === cold0Win
+                              ? "۱ گلر + ۷ اسکیت‌باز TOI • هم‌جهتی کامل دو قطب"
+                              : "۱ گلر + ۷ اسکیت‌باز TOI • واگرایی قطب گرم و سرد"
+                            : "۱ گلر + ۷ اسکیت‌باز TOI (مقایسه با +تیم)",
+                        hText: fmtSigned(hDeltaPwr8),
+                        hSub: `ΔGF:${fmtSigned(hDeltaGf8)} • +تیم:${fmtSigned(hDeltaPwr9)}`,
+                        hTick: nhlDelta8Win === g.h ? "pass" : "none",
+                        aText: fmtSigned(aDeltaPwr8),
+                        aSub: `ΔGF:${fmtSigned(aDeltaGf8)} • +تیم:${fmtSigned(aDeltaPwr9)}`,
+                        aTick: nhlDelta8Win === g.a ? "pass" : "none",
+                      };
+
                       const checklistRows: CheckRow[] = isPureGfFinMode
                         ? [rowGfAndS3]
                         : isNhlIceFamily
-                          ? [rowTeamOnly, rowPlayerOnly, rowWarm1xxx, rowT12DomElem, rowIceYangShield]
+                          ? [
+                              rowTeamOnly,
+                              rowPlayerOnly,
+                              rowNhlWarm8,
+                              rowNhlCold8,
+                              rowNhlDelta8,
+                              rowT12DomElem,
+                              rowIceYangShield,
+                            ]
                           : isTotalElem12Mode
                             ? [rowT12Warm, rowT12Cold, rowT12Delta, rowT12Sum, rowT12DomElem]
                             : isTriUltraFamily
