@@ -466,6 +466,14 @@ type NbaGamePred = {
       nobet_reason_fa?: string;
       combo_h?: number;
       combo_a?: number;
+      sum_d8?: number;
+      h_s12?: number;
+      a_s12?: number;
+      h_warm_pct?: number;
+      a_warm_pct?: number;
+      h_wet_pct?: number;
+      a_wet_pct?: number;
+      heat_lock_80?: boolean;
     };
   };
   ice_wtp?: {
@@ -894,7 +902,7 @@ const TWIN_PATTERN_DEFS: {
     key: "tall",
     titleFa: "۶. کل بازی‌های مسیر‌یابی‌شده با موتور جدید NHL (بدون حذف بازی)",
     titleEn: "All Routed NHL Games Under Active Engine (Zero-Drop)",
-    formulaFa: "نمایش برد و باخت تمام ۳٬۱۵۰ بازی NHL بدون حذف هیچ بازی: سیگنال‌های رسمی با گارد دوقطبی (TR8∪TR9) + مسیریاب ضدتله باکس ۱ روی بازی‌های خارج از سیگنال (TR1..TR13 ∪ EC1..EC4: مجموع EARTH + Pyth% کوچک‌تر)",
+    formulaFa: "نمایش برد و باخت تمام ۳٬۱۵۰ بازی NHL بدون حذف هیچ بازی: سیگنال‌های رسمی با گارد دوقطبی (TR8∪TR9) + مسیریاب ضدتله باکس ۱ روی بازی‌های خارج از سیگنال (TR1..TR13 ∪ EC1..EC4 ∪ TM1..TM4: مزاج و طبایع ΣΔ8)",
   },
 ];
 
@@ -1935,11 +1943,12 @@ export default function NbaDashboardTab({
   twinDbKind?: TwinDbKind;
 }) {
   const [rawGames, setRawGames] = useState<NbaGamePred[]>([]);
-  type CardBoxKey = "referee6" | "sixboxes" | "box1" | "smart" | "box2" | "dom" | "elem" | "fusion4" | "lineup";
+  type CardBoxKey = "referee6" | "sixboxes" | "box1" | "temperament" | "smart" | "box2" | "dom" | "elem" | "fusion4" | "lineup";
   const [defaultCardBoxes, setDefaultCardBoxes] = useState<Record<CardBoxKey, boolean>>({
     referee6: false,
     sixboxes: false,
     box1: false,
+    temperament: true,
     smart: false,
     box2: true,
     dom: false,
@@ -1961,7 +1970,7 @@ export default function NbaDashboardTab({
   };
   const toggleGlobalCardBox = (key: CardBoxKey) => {
     const nextOpen = !defaultCardBoxes[key];
-    const innerSixKeys: CardBoxKey[] = ["box1", "smart", "box2", "dom", "elem", "fusion4"];
+    const innerSixKeys: CardBoxKey[] = ["box1", "temperament", "smart", "box2", "dom", "elem", "fusion4"];
     const autoOpenSix = nextOpen && innerSixKeys.includes(key);
     setDefaultCardBoxes((prev) => ({
       ...prev,
@@ -1982,6 +1991,7 @@ export default function NbaDashboardTab({
       referee6: open,
       sixboxes: open,
       box1: open,
+      temperament: open,
       smart: open,
       box2: open,
       dom: open,
@@ -2113,6 +2123,10 @@ export default function NbaDashboardTab({
     const ice = g.fusion_meta?.nhl_ice;
     return Boolean(ice?.nobet_flipped && String(ice?.nobet_trap_code || "").startsWith("EC"));
   };
+  const isNhlTmTrapCard = (g: NbaGamePred) => {
+    const ice = g.fusion_meta?.nhl_ice;
+    return Boolean(ice?.nobet_flipped && String(ice?.nobet_trap_code || "").startsWith("TM"));
+  };
   const isNhlTrapFlippedCard = (g: NbaGamePred) => {
     const ice = g.fusion_meta?.nhl_ice;
     return Boolean(ice?.nobet_flipped || ice?.m15_flipped || ice?.m16_flipped);
@@ -2126,6 +2140,7 @@ export default function NbaDashboardTab({
     | "anti_nobet"
     | "trap_flip"
     | "ec_flip"
+    | "tm_flip"
     | "formula_a"
     | "formula_b"
     | "referee6"
@@ -2867,6 +2882,7 @@ export default function NbaDashboardTab({
                             | "anti_nobet"
                             | "trap_flip"
                             | "ec_flip"
+                            | "tm_flip"
                             | "formula_a"
                             | "formula_b"
                             | "referee6"
@@ -2884,7 +2900,7 @@ export default function NbaDashboardTab({
                       <option value="all">همه کارت‌های روز ({gamesOnDailyDate.length} بازی)</option>
                       <option value="qualified">فقط سیگنال‌های تاییدشده موتور فعال ({gamesOnDailyDate.filter((x) => activeF1WtpOf(x)).length} بازی)</option>
                       <option value="signal_or_trap">
-                        سیگنال‌های فعال + چرخش‌های ضدتله ({gamesOnDailyDate.filter((x) => isNhlSignalOrTrapCard(x)).length} بازی)
+                        سیگنال‌های فعال + چرخش‌های ضدتله (TR/EC/TM) ({gamesOnDailyDate.filter((x) => isNhlSignalOrTrapCard(x)).length} بازی)
                       </option>
                       <option value="anti_nobet">
                         {fusionMode === "total_elem_12"
@@ -2892,10 +2908,13 @@ export default function NbaDashboardTab({
                           : `فقط سیگنال‌های باکس ضد NO-BET هوشمند (${gamesOnDailyDate.filter((x) => evalSmartAntiNoBet(x).sig).length} بازی)`}
                       </option>
                       <option value="trap_flip">
-                        فقط چرخش‌های ضدتله باکس ۱ (TR + EC) ({gamesOnDailyDate.filter((x) => isNhlTrapFlippedCard(x)).length} بازی)
+                        فقط چرخش‌های ضدتله باکس ۱ (TR + EC + TM) ({gamesOnDailyDate.filter((x) => isNhlTrapFlippedCard(x)).length} بازی)
                       </option>
                       <option value="ec_flip">
                         فقط چرخش‌های تله دو-EARTH (EC1..EC4) ({gamesOnDailyDate.filter((x) => isNhlEcTrapCard(x)).length} بازی)
+                      </option>
+                      <option value="tm_flip">
+                        فقط چرخش‌های مزاج و طبایع (TM1..TM4) ({gamesOnDailyDate.filter((x) => isNhlTmTrapCard(x)).length} بازی)
                       </option>
                       {fusionMode === "total_elem_12" && (
                         <>
@@ -3160,6 +3179,13 @@ export default function NbaDashboardTab({
                 const ecFlipPct =
                   ecFlipDone.length > 0 ? Math.round((1000 * ecFlipWins) / ecFlipDone.length) / 10 : null;
 
+                const tmFlipCards = gamesOnDailyDate.filter((x) => isNhlTmTrapCard(x));
+                const tmFlipDone = tmFlipCards.filter((x) => Boolean(x.done && x.aw && x.aw !== "PENDING"));
+                const tmFlipWins = tmFlipDone.filter((x) => evalTrapPick(x) === x.aw).length;
+                const tmFlipLosses = tmFlipDone.length - tmFlipWins;
+                const tmFlipPct =
+                  tmFlipDone.length > 0 ? Math.round((1000 * tmFlipWins) / tmFlipDone.length) / 10 : null;
+
                 const evalComboPick = (x: NbaGamePred) =>
                   activeF1WtpOf(x) ? evalPick(x) : evalTrapPick(x);
                 const sigOrTrapCards = gamesOnDailyDate.filter((x) => isNhlSignalOrTrapCard(x));
@@ -3193,16 +3219,18 @@ export default function NbaDashboardTab({
                           data-testid="badge-daily-trap-flips"
                           className="px-2 py-0.5 rounded bg-violet-100 text-violet-950 border border-violet-400 font-mono font-extrabold"
                         >
-                          🔄 چرخش تله (TR+EC): {trapFlipWins} برد - {trapFlipLosses} باخت ({trapFlipPct}%)
+                          🔄 چرخش تله (TR+EC+TM): {trapFlipWins} برد - {trapFlipLosses} باخت ({trapFlipPct}%)
                           {ecFlipDone.length > 0 ? ` • خاک+یخ EC: ${ecFlipWins}-${ecFlipLosses} (${ecFlipPct}%)` : ""}
+                          {tmFlipDone.length > 0 ? ` • مزاج TM: ${tmFlipWins}-${tmFlipLosses} (${tmFlipPct}%)` : ""}
                         </span>
                       ) : trapFlipCards.length > 0 ? (
                         <span
                           data-testid="badge-daily-trap-flips"
                           className="px-2 py-0.5 rounded bg-violet-50 text-violet-950 border border-violet-300 font-mono font-extrabold"
                         >
-                          🔄 چرخش تله فعال (TR+EC): {trapFlipCards.length} بازی
+                          🔄 چرخش تله فعال (TR+EC+TM): {trapFlipCards.length} بازی
                           {ecFlipCards.length > 0 ? ` (${ecFlipCards.length} تله EC)` : ""}
+                          {tmFlipCards.length > 0 ? ` (${tmFlipCards.length} تله TM)` : ""}
                         </span>
                       ) : null}
                       {sigOrTrapDone.length > 0 ? (
@@ -3386,6 +3414,20 @@ export default function NbaDashboardTab({
                           🔄 تله EC ({ecFlipCards.length})
                         </button>
                       )}
+                      {(tmFlipCards.length > 0 || dailyCardFilter === "tm_flip") && (
+                        <button
+                          type="button"
+                          data-testid="btn-filter-tm-flip"
+                          onClick={() => setDailyCardFilter((prev) => (prev === "tm_flip" ? "all" : "tm_flip"))}
+                          className={`px-2 py-0.5 rounded border font-extrabold transition-colors ${
+                            dailyCardFilter === "tm_flip"
+                              ? "bg-purple-700 text-white border-purple-800 shadow-2xs ring-1 ring-purple-300"
+                              : "bg-purple-100/90 text-purple-950 border-purple-400 hover:bg-purple-200/80"
+                          }`}
+                        >
+                          🔄 تله TM ({tmFlipCards.length})
+                        </button>
+                      )}
                       {fusionMode === "total_elem_12" && (
                         <>
                           <button
@@ -3467,6 +3509,7 @@ export default function NbaDashboardTab({
                       { key: "referee6" as CardBoxKey, label: "جدول داور نهایی", show: fusionMode === "total_elem_12" },
                       { key: "sixboxes" as CardBoxKey, label: "مجموعه ۶ باکس", show: fusionMode === "total_elem_12" },
                       { key: "box1" as CardBoxKey, label: "باکس ۱ (چک‌لیست)", show: true },
+                      { key: "temperament" as CardBoxKey, label: "باکس مزاج و طبع (ΣΔ8)", show: true },
                       {
                         key: "smart" as CardBoxKey,
                         label: fusionMode === "total_elem_12" ? "باکس هوشمند ۱۴" : "باکس ضد NO-BET",
@@ -5140,6 +5183,7 @@ export default function NbaDashboardTab({
                       if (dailyCardFilter === "anti_nobet") return fusionMode === "total_elem_12" ? evalSmartMode14(item.g).sig : evalSmartAntiNoBet(item.g).sig;
                       if (dailyCardFilter === "trap_flip") return isNhlTrapFlippedCard(item.g);
                       if (dailyCardFilter === "ec_flip") return isNhlEcTrapCard(item.g);
+                      if (dailyCardFilter === "tm_flip") return isNhlTmTrapCard(item.g);
                       if (dailyCardFilter === "formula_a") return fusionMode === "total_elem_12" ? evalSmartMode14(item.g).formulaA.sig : item.isQualified;
                       if (dailyCardFilter === "formula_b") return fusionMode === "total_elem_12" ? evalSmartMode14(item.g).formulaB.sig : item.isQualified;
                       if (dailyCardFilter === "referee6") return fusionMode === "total_elem_12" ? evalSmartMode14(item.g).referee6.active : item.isQualified;
@@ -5408,9 +5452,11 @@ export default function NbaDashboardTab({
                               : isQualified
                                 ? `✓ سیگنال فعال ${activePresetLabel} (${wtpObj.matchElem} ${wtpObj.l5Pick}% • ≤${maxBuyCents}¢)`
                                 : nhlNoBetTrapFlipped
-                                  ? `🔄 مسیر بدون بت ضدتله باکس ۱ (${g.fusion_meta?.nhl_ice?.nobet_trap_code || g.fusion_meta?.nhl_ice?.m16_flip_code?.split("_").pop() || "TRAP"} → ${predTeam === g.h ? g.hc : g.ac}) • ${activePresetLabel}`
+                                  ? `🔄 مسیر بدون بت ضدتله (${g.fusion_meta?.nhl_ice?.nobet_trap_code || g.fusion_meta?.nhl_ice?.m16_flip_code?.split("_").pop() || "TRAP"} → ${predTeam === g.h ? g.hc : g.ac}) • ${activePresetLabel}`
                                   : isNhlIceFamily
-                                    ? `🧭 مسیر بدون بت کفه یخ (${predTeam === g.h ? g.hc : g.ac}) • ${activePresetLabel}`
+                                    ? g.fusion_meta?.nhl_ice?.heat_lock_80
+                                      ? `🔥 مسیر کفه یخ + تایید قفل گرمی مزاج (${predTeam === g.h ? g.hc : g.ac}) • ${activePresetLabel}`
+                                      : `🧭 مسیر بدون بت کفه یخ (${predTeam === g.h ? g.hc : g.ac}) • ${activePresetLabel}`
                                     : isTriAntiDropMode
                                       ? `🧭 مسیر برنده بدون حذف (${predTeam === g.h ? g.hc : g.ac}) • ${activePresetLabel}`
                                       : `خارج از سیگنال • ${activePresetLabel}`
@@ -5458,6 +5504,7 @@ export default function NbaDashboardTab({
                       const outCnt = (g.h_out?.length ?? 0) + (g.a_out?.length ?? 0);
                       const isLineupOpen = isCardBoxOpen(g.n, "lineup");
                       const isBox1Open = isCardBoxOpen(g.n, "box1");
+                      const isTempBoxOpen = isCardBoxOpen(g.n, "temperament");
                       const isSmartBoxOpen = isCardBoxOpen(g.n, "smart");
                       const isBox2Open = isCardBoxOpen(g.n, "box2");
                       const isDomBoxOpen = isCardBoxOpen(g.n, "dom");
@@ -6474,9 +6521,13 @@ export default function NbaDashboardTab({
                       const m16Kind = nhlIceMeta?.m16_kind ?? "";
                       const nbTrapCode = nhlIceMeta?.nobet_trap_code ?? "";
                       const isEcTrap = nbTrapCode.startsWith("EC");
+                      const isTmTrap = nbTrapCode.startsWith("TM");
+                      const isHeatLock80 = Boolean(nhlIceMeta?.heat_lock_80);
                       const nbTrapBadgeLabel = isEcTrap
                         ? `چرخش تله ${nbTrapCode} (مجموع EARTH+Pyth% کوچک‌تر)`
-                        : `چرخش ضدتله باکس ۱ [${nbTrapCode}]`;
+                        : isTmTrap
+                          ? `چرخش مزاج و طبایع ${nbTrapCode} (ΣΔ8)`
+                          : `چرخش ضدتله باکس ۱ [${nbTrapCode}]`;
                       const m15LockTitleMap: Record<string, string> = {
                         ICE_DIAMOND: "الماس دو موتور هاکی (T∩P • DEG1=88) + سپر یخ",
                         ICE_YANG_TWIN_LOCK: "ابرقفل هاکی DEG1=88: همزاد دو-ستونی + سپر FIRE/AIR + ۱ گلر و ۷ اسکیت‌باز",
@@ -6506,9 +6557,284 @@ export default function NbaDashboardTab({
                         ICE_HOLD: nbTrapCode
                           ? isEcTrap
                             ? `🔄 چرخش تله ${nbTrapCode} (مجموع EARTH + Pyth% کوچک‌تر) → برد تیم کوچک‌تر`
-                            : `🔄 چرخش مسیر بدون بت باکس ۱ [${nbTrapCode}]: مهار تله Pyth≥50% → برد تیم مقابل`
-                          : "مسیر پایه کفه یخ هاکی (بدون احراز شرایط ابرقفل حالت ۱۵)",
+                            : isTmTrap
+                              ? `🔄 چرخش مزاج و طبایع ${nbTrapCode} (انطباق طبع سطر ۶+۷ با ΣΔ8) → برد تیم هم‌مزاج`
+                              : `🔄 چرخش مسیر بدون بت باکس ۱ [${nbTrapCode}]: مهار تله Pyth≥50% → برد تیم مقابل`
+                          : isHeatLock80
+                            ? "🔥 مسیر پایه کفه یخ هاکی + تایید مستقیم قفل گرمی مزاج (ΣΔ8 ≥ +80)"
+                            : "مسیر پایه کفه یخ هاکی (بدون احراز شرایط ابرقفل حالت ۱۵)",
                       };
+
+                      // 5-Row Ticked Temperament & Nature Box (ΣΔ8 + Row 6 + Row 7 + EC + TM1..TM4):
+                      const sumD8Val =
+                        typeof nhlIceMeta?.sum_d8 === "number"
+                          ? nhlIceMeta.sum_d8
+                          : Math.round((hDeltaPwr8 + aDeltaPwr8) * 10) / 10;
+                      const tempOrd21: Record<string, number> = { FIRE: 2, AIR: 1, TIE: 0, EARTH: -1, WATER: -2 };
+                      const elemTempNameFa = (el: string) =>
+                        el === "FIRE"
+                          ? "گرم و خشک"
+                          : el === "AIR"
+                            ? "گرم و تر"
+                            : el === "EARTH"
+                              ? "سرد و خشک"
+                              : el === "WATER"
+                                ? "سرد و تر"
+                                : "متعادل";
+                      const hDomR6 = String(nhlIceMeta?.h_dom || sm14.hDomInfo.dom || "EARTH");
+                      const aDomR6 = String(nhlIceMeta?.a_dom || sm14.aDomInfo.dom || "EARTH");
+                      const hS12Val =
+                        typeof nhlIceMeta?.h_s12 === "number"
+                          ? nhlIceMeta.h_s12
+                          : (tempOrd21[hDomR6] ?? 0) + 2 * (tempOrd21[hIceEl] ?? 0);
+                      const aS12Val =
+                        typeof nhlIceMeta?.a_s12 === "number"
+                          ? nhlIceMeta.a_s12
+                          : (tempOrd21[aDomR6] ?? 0) + 2 * (tempOrd21[aIceEl] ?? 0);
+                      const hEfArr = t12?.h_ef_tot && t12.h_ef_tot.length === 4 ? t12.h_ef_tot : [0, 0, 0, 0];
+                      const aEfArr = t12?.a_ef_tot && t12.a_ef_tot.length === 4 ? t12.a_ef_tot : [0, 0, 0, 0];
+                      const hEfSum = Math.max(1, hEfArr[0] + hEfArr[1] + hEfArr[2] + hEfArr[3]);
+                      const aEfSum = Math.max(1, aEfArr[0] + aEfArr[1] + aEfArr[2] + aEfArr[3]);
+                      const hWarmPct =
+                        typeof nhlIceMeta?.h_warm_pct === "number"
+                          ? nhlIceMeta.h_warm_pct
+                          : Math.round((1000 * (hEfArr[0] + hEfArr[1])) / hEfSum) / 10;
+                      const aWarmPct =
+                        typeof nhlIceMeta?.a_warm_pct === "number"
+                          ? nhlIceMeta.a_warm_pct
+                          : Math.round((1000 * (aEfArr[0] + aEfArr[1])) / aEfSum) / 10;
+                      const hWetPct =
+                        typeof nhlIceMeta?.h_wet_pct === "number"
+                          ? nhlIceMeta.h_wet_pct
+                          : Math.round((1000 * (hEfArr[1] + hEfArr[2])) / hEfSum) / 10;
+                      const aWetPct =
+                        typeof nhlIceMeta?.a_wet_pct === "number"
+                          ? nhlIceMeta.a_wet_pct
+                          : Math.round((1000 * (aEfArr[1] + aEfArr[2])) / aEfSum) / 10;
+                      const hMaxDomCnt = Math.max(...hEfArr, 0);
+                      const aMaxDomCnt = Math.max(...aEfArr, 0);
+                      const hComboEc =
+                        typeof nhlIceMeta?.combo_h === "number"
+                          ? nhlIceMeta.combo_h
+                          : Math.round((hMaxDomCnt + hPhIce) * 10) / 10;
+                      const aComboEc =
+                        typeof nhlIceMeta?.combo_a === "number"
+                          ? nhlIceMeta.combo_a
+                          : Math.round((aMaxDomCnt + aPhIce) * 10) / 10;
+                      const comboGapEc = Math.round(Math.abs(hComboEc - aComboEc) * 10) / 10;
+                      const isDualEarthRegime =
+                        (hDomR6 === "EARTH" && aDomR6 === "EARTH") || (hIceEl === "EARTH" && aIceEl === "EARTH");
+
+                      const tmRuleShortMap: Record<string, string> = {
+                        TM1: "دو-منفی ΣΔ8≤−40 • سرد/تر برابر AIR + برتری ΔGF",
+                        TM2: "ΣΔ8<0 مرزی • WATER برابر AIR + برتری Δ8",
+                        TM3: "ΣΔ8<0 مرزی • تری بالاتر + s12 سردتر + ۰xxx",
+                        TM4: "ΣΔ8≥+15 • هسته سرد WATER حریف + گرمی و Δ8",
+                        EC1: "دو-EARTH یخ • مجموع کوچک‌تر + ۱xxx منفی + ۰xxx",
+                        EC2: "دو-EARTH غالب • مجموع کوچک‌تر + بردار +Tm",
+                        EC3: "اضافه‌بار EARTH + شکاف ΔGF + توافق T و P",
+                        EC4: "دو-EARTH غالب • بردار +Tm + سیگنال همزاد",
+                      };
+                      const tmEcSelectedTeam =
+                        (isTmTrap || isEcTrap) && nhlIceMeta?.nobet_orig_fav
+                          ? nhlIceMeta.nobet_orig_fav === g.h
+                            ? g.a
+                            : g.h
+                          : isHeatLock80
+                            ? hPhIce >= 50
+                              ? g.h
+                              : g.a
+                            : "";
+
+                      const tempChecklistRows: CheckRow[] = [
+                        {
+                          key: "tm_sum_d8",
+                          testId: `row-tm-sumd8-${g.n}`,
+                          stepTitle: "جمع تفاضل دو قطب (ΣΔ8 = Δ8_H + Δ8_A)",
+                          stepSub: `ΣΔ8 = ${fmtSigned(sumD8Val)} • ${
+                            sumD8Val > 0
+                              ? "مثبت = طلب گرمی و خشکی (FIRE/AIR)"
+                              : sumD8Val < 0
+                                ? "منفی = طلب سردی و تری (WATER/EARTH)"
+                                : "صفر = خنثی"
+                          }`,
+                          hText: `Δ8: ${fmtSigned(hDeltaPwr8)}`,
+                          hSub: `${hDeltaPwr8 > 0 ? "قطب مثبت (+)" : hDeltaPwr8 < 0 ? "قطب منفی (−)" : "خنثی"} • +Tm:${fmtSigned(hDeltaPwr9)}`,
+                          hTick:
+                            sumD8Val > 0
+                              ? hDeltaPwr8 > aDeltaPwr8
+                                ? "pass"
+                                : "none"
+                              : sumD8Val < 0
+                                ? hDeltaPwr8 < aDeltaPwr8
+                                  ? "pass"
+                                  : "none"
+                                : "none",
+                          aText: `Δ8: ${fmtSigned(aDeltaPwr8)}`,
+                          aSub: `${aDeltaPwr8 > 0 ? "قطب مثبت (+)" : aDeltaPwr8 < 0 ? "قطب منفی (−)" : "خنثی"} • +Tm:${fmtSigned(aDeltaPwr9)}`,
+                          aTick:
+                            sumD8Val > 0
+                              ? aDeltaPwr8 > hDeltaPwr8
+                                ? "pass"
+                                : "none"
+                              : sumD8Val < 0
+                                ? aDeltaPwr8 < hDeltaPwr8
+                                  ? "pass"
+                                  : "none"
+                                : "none",
+                        },
+                        {
+                          key: "tm_s12",
+                          testId: `row-tm-s12-${g.n}`,
+                          stepTitle: "طبع ترکیبی المنت و سپر یخ (سطر ۶ + ۲×سطر ۷)",
+                          stepSub:
+                            sumD8Val > 0
+                              ? "سازگار با ΣΔ8>0: طبع گرم‌تر (s12 بزرگ‌تر) ✓"
+                              : sumD8Val < 0
+                                ? "سازگار با ΣΔ8<0: طبع سردتر/ترتر (s12 کوچک‌تر) ✓"
+                                : "مقایسه امتیاز مزاجی s12 دو تیم",
+                          hText: `${hDomR6}+${hIceEl} (s12:${fmtSigned(hS12Val)})`,
+                          hSub: `${elemTempNameFa(hDomR6)} + سپر ${elemTempNameFa(hIceEl)}`,
+                          hTick:
+                            sumD8Val > 0
+                              ? hS12Val > aS12Val
+                                ? "pass"
+                                : "none"
+                              : sumD8Val < 0
+                                ? hS12Val < aS12Val
+                                  ? "pass"
+                                  : "none"
+                                : "none",
+                          aText: `${aDomR6}+${aIceEl} (s12:${fmtSigned(aS12Val)})`,
+                          aSub: `${elemTempNameFa(aDomR6)} + سپر ${elemTempNameFa(aIceEl)}`,
+                          aTick:
+                            sumD8Val > 0
+                              ? aS12Val > hS12Val
+                                ? "pass"
+                                : "none"
+                              : sumD8Val < 0
+                                ? aS12Val < hS12Val
+                                  ? "pass"
+                                  : "none"
+                                : "none",
+                        },
+                        {
+                          key: "tm_vec_share",
+                          testId: `row-tm-vec-${g.n}`,
+                          stepTitle: "سهم گرمی (F+A)% و تری (W+A)% بردار [F-A-W-E]",
+                          stepSub:
+                            sumD8Val > 0
+                              ? "در ΣΔ8>0: سهم گرمی (F+A)% بالاتر ✓"
+                              : sumD8Val < 0
+                                ? "در ΣΔ8<0: سهم تری (W+A)% بالاتر ✓"
+                                : "توزیع طبایع بردار چهارگانه سطر ۶",
+                          hText: `گرم ${hWarmPct.toFixed(1)}% • تر ${hWetPct.toFixed(1)}%`,
+                          hSub: `[${fmtFawe(hEfArr)}]`,
+                          hTick:
+                            sumD8Val > 0
+                              ? hWarmPct > aWarmPct
+                                ? "pass"
+                                : "none"
+                              : sumD8Val < 0
+                                ? hWetPct > aWetPct
+                                  ? "pass"
+                                  : "none"
+                                : "none",
+                          aText: `گرم ${aWarmPct.toFixed(1)}% • تر ${aWetPct.toFixed(1)}%`,
+                          aSub: `[${fmtFawe(aEfArr)}]`,
+                          aTick:
+                            sumD8Val > 0
+                              ? aWarmPct > hWarmPct
+                                ? "pass"
+                                : "none"
+                              : sumD8Val < 0
+                                ? aWetPct > hWetPct
+                                  ? "pass"
+                                  : "none"
+                                : "none",
+                        },
+                        {
+                          key: "tm_ec_combo",
+                          testId: `row-tm-ec-${g.n}`,
+                          stepTitle: "مجموع المنت غالب + سپر یخ (Elem + Pyth% • شاخص EC)",
+                          stepSub: `شکاف Gap = ${comboGapEc.toFixed(1)} • ${
+                            isDualEarthRegime ? "رژیم دو-خاک/یین: مجموع کوچک‌تر ✓" : "خارج از رژیم دو-خاک"
+                          }`,
+                          hText: `${hComboEc.toFixed(1)}`,
+                          hSub: `${hDomR6}(${hMaxDomCnt}) + ${hPhIce.toFixed(1)}%`,
+                          hTick:
+                            (isDualEarthRegime || isEcTrap) && hComboEc !== aComboEc
+                              ? hComboEc < aComboEc
+                                ? "pass"
+                                : isEcTrap
+                                  ? "trap"
+                                  : "none"
+                              : "none",
+                          aText: `${aComboEc.toFixed(1)}`,
+                          aSub: `${aDomR6}(${aMaxDomCnt}) + ${aPhIce.toFixed(1)}%`,
+                          aTick:
+                            (isDualEarthRegime || isEcTrap) && hComboEc !== aComboEc
+                              ? aComboEc < hComboEc
+                                ? "pass"
+                                : isEcTrap
+                                  ? "trap"
+                                  : "none"
+                              : "none",
+                        },
+                        {
+                          key: "tm_verdict",
+                          testId: `row-tm-verdict-${g.n}`,
+                          stepTitle: "حکم لایه مزاج و تله (TM1..TM4 / EC1..EC4 / تایید گرمی)",
+                          stepSub:
+                            isTmTrap || isEcTrap
+                              ? tmRuleShortMap[nbTrapCode] || `فعال‌شدن قانون ${nbTrapCode}`
+                              : isHeatLock80
+                                ? "تایید مستقیم قفل گرمی در دو-مثبت ΣΔ8 ≥ +80"
+                                : "بدون فعال‌شدن زیرقانون مزاج/EC روی این کارت",
+                          hText:
+                            tmEcSelectedTeam === g.h
+                              ? isTmTrap || isEcTrap
+                                ? `🔄 شکار ${nbTrapCode}`
+                                : "🔥 قفل گرمی تایید"
+                              : (isTmTrap || isEcTrap) && tmEcSelectedTeam === g.a
+                                ? `رد تله ${nbTrapCode}`
+                                : "خنثی",
+                          hSub:
+                            tmEcSelectedTeam === g.h
+                              ? isHeatLock80
+                                ? `ΣΔ8=${fmtSigned(sumD8Val)}≥+80`
+                                : `انتخاب ${g.hc}`
+                              : undefined,
+                          hTick:
+                            tmEcSelectedTeam === g.h
+                              ? "pass"
+                              : (isTmTrap || isEcTrap) && tmEcSelectedTeam === g.a
+                                ? "trap"
+                                : "none",
+                          aText:
+                            tmEcSelectedTeam === g.a
+                              ? isTmTrap || isEcTrap
+                                ? `🔄 شکار ${nbTrapCode}`
+                                : "🔥 قفل گرمی تایید"
+                              : (isTmTrap || isEcTrap) && tmEcSelectedTeam === g.h
+                                ? `رد تله ${nbTrapCode}`
+                                : "خنثی",
+                          aSub:
+                            tmEcSelectedTeam === g.a
+                              ? isHeatLock80
+                                ? `ΣΔ8=${fmtSigned(sumD8Val)}≥+80`
+                                : `انتخاب ${g.ac}`
+                              : undefined,
+                          aTick:
+                            tmEcSelectedTeam === g.a
+                              ? "pass"
+                              : (isTmTrap || isEcTrap) && tmEcSelectedTeam === g.h
+                                ? "trap"
+                                : "none",
+                        },
+                      ];
+                      const tempHomeTicks = tempChecklistRows.filter((r) => r.hTick === "pass").length;
+                      const tempAwayTicks = tempChecklistRows.filter((r) => r.aTick === "pass").length;
                       const m16TitleMap: Record<string, string> = {
                         M15_CORE: m15LockTitleMap[m15Code] || "سیگنال اصلی حالت ۱۵ هاکی تایید شد",
                         YANG_UNION_RELEASE: "گروه ۱ ضد NO-BET هاکی: آزادسازی اتحاد همزاد با سپر FIRE/AIR",
@@ -7624,6 +7950,176 @@ export default function NbaDashboardTab({
                             )}
 
                             {/* ============================================================ */}
+                            {/* TEMPERAMENT & NATURE BOX (ΣΔ8 • Row 6 + Row 7 • TM1..TM4)    */}
+                            {/* ============================================================ */}
+                            <div
+                              data-testid={`box-temperament-${g.n}`}
+                              className={`rounded-lg border bg-white overflow-hidden shadow-2xs ${
+                                isTmTrap
+                                  ? "border-purple-400"
+                                  : isEcTrap
+                                    ? "border-fuchsia-400"
+                                    : isHeatLock80
+                                      ? "border-amber-400"
+                                      : "border-teal-300"
+                              }`}
+                            >
+                              <button
+                                type="button"
+                                data-testid={`toggle-temperament-${g.n}`}
+                                onClick={() => toggleCardBox(g.n, "temperament")}
+                                className={`w-full px-2.5 py-1.5 transition-colors flex flex-wrap items-center justify-between gap-1.5 text-[10px] text-right ${
+                                  isTmTrap
+                                    ? "bg-purple-100/85 hover:bg-purple-200/70"
+                                    : isEcTrap
+                                      ? "bg-fuchsia-100/85 hover:bg-fuchsia-200/70"
+                                      : isHeatLock80
+                                        ? "bg-amber-100/85 hover:bg-amber-200/70"
+                                        : "bg-teal-50/90 hover:bg-teal-100/75"
+                                } ${isTempBoxOpen ? "border-b border-teal-200" : ""}`}
+                              >
+                                <span className="font-extrabold text-slate-950">
+                                  باکس مزاج و طبع (ΣΔ8) • طبایع چهارگانه عناصر
+                                </span>
+                                <div className="inline-flex flex-wrap items-center gap-1 shrink-0">
+                                  <span
+                                    dir="ltr"
+                                    className={`px-1.5 py-0.5 rounded border font-mono font-extrabold text-[9px] whitespace-nowrap ${
+                                      sumD8Val > 0
+                                        ? "bg-amber-100 text-amber-950 border-amber-400"
+                                        : sumD8Val < 0
+                                          ? "bg-cyan-100 text-cyan-950 border-cyan-400"
+                                          : "bg-slate-100 text-slate-700 border-slate-300"
+                                    }`}
+                                  >
+                                    {sumD8Val > 0
+                                      ? `🔥 رژیم گرم ΣΔ8=${fmtSigned(sumD8Val)}`
+                                      : sumD8Val < 0
+                                        ? `❄️ رژیم سرد ΣΔ8=${fmtSigned(sumD8Val)}`
+                                        : `⚖️ ΣΔ8=0.0`}
+                                  </span>
+                                  {(isTmTrap || isEcTrap || isHeatLock80) && (
+                                    <span
+                                      className={`px-1.5 py-0.5 rounded border font-extrabold text-[9px] whitespace-nowrap ${
+                                        isTmTrap
+                                          ? "bg-purple-700 text-white border-purple-800"
+                                          : isEcTrap
+                                            ? "bg-fuchsia-700 text-white border-fuchsia-800"
+                                            : "bg-emerald-600 text-white border-emerald-700"
+                                      }`}
+                                    >
+                                      {isTmTrap || isEcTrap ? `🔄 ${nbTrapCode}` : "✓ قفل گرمی"}
+                                    </span>
+                                  )}
+                                  <span
+                                    dir="ltr"
+                                    className="whitespace-nowrap font-mono font-extrabold text-[9.5px] px-1.5 py-0.5 rounded bg-white border border-teal-200 text-slate-800"
+                                  >
+                                    {g.hc}: {tempHomeTicks}✓ | {g.ac}: {tempAwayTicks}✓
+                                  </span>
+                                  <span className="px-1.5 py-0.5 rounded bg-white/90 border border-teal-300 text-teal-950 font-extrabold text-[9px]">
+                                    {isTempBoxOpen ? "بستن ▲" : "باز کردن ▼"}
+                                  </span>
+                                </div>
+                              </button>
+
+                              {isTempBoxOpen && (
+                                <table className="w-full text-[10px] border-collapse">
+                                  <thead>
+                                    <tr className="bg-slate-50 border-b border-teal-100 text-slate-700">
+                                      <th className="py-1 px-2 text-right font-extrabold w-[40%]">شاخص مزاج و طبایع</th>
+                                      <th className="py-1 px-1.5 text-center font-extrabold border-r border-teal-100 w-[30%]">
+                                        میزبان ({g.hc})
+                                      </th>
+                                      <th className="py-1 px-1.5 text-center font-extrabold border-r border-teal-100 w-[30%]">
+                                        میهمان ({g.ac})
+                                      </th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100">
+                                    {tempChecklistRows.map((r, idx) => {
+                                      const renderTempCell = (txt: string, sub: string | undefined, tick: CheckTick) => (
+                                        <div className="flex flex-col items-center justify-center leading-tight py-0.5">
+                                          <div className="inline-flex items-center gap-1 font-mono tabular-nums" dir="ltr">
+                                            {tick === "pass" ? (
+                                              <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white font-sans font-extrabold text-[9.5px] shrink-0">
+                                                ✓
+                                              </span>
+                                            ) : tick === "trap" ? (
+                                              <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-rose-600 text-white font-sans font-extrabold text-[9.5px] shrink-0">
+                                                ✕
+                                              </span>
+                                            ) : (
+                                              <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-slate-100 text-slate-400 font-sans text-[9px] shrink-0">
+                                                —
+                                              </span>
+                                            )}
+                                            <span
+                                              className={
+                                                tick === "pass"
+                                                  ? "font-extrabold text-emerald-900"
+                                                  : tick === "trap"
+                                                    ? "font-extrabold text-rose-800"
+                                                    : "text-slate-600 font-medium"
+                                              }
+                                            >
+                                              {txt}
+                                            </span>
+                                          </div>
+                                          {sub && (
+                                            <span className="text-[8.5px] font-mono text-slate-500 mt-0.5" dir="ltr">
+                                              {sub}
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                      return (
+                                        <tr
+                                          key={r.key}
+                                          data-testid={r.testId}
+                                          className="hover:bg-teal-50/40 transition-colors"
+                                        >
+                                          <td className="py-1 px-2 align-middle">
+                                            <div className="font-bold text-slate-900 leading-snug">
+                                              {idx + 1}. {r.stepTitle}
+                                            </div>
+                                            {r.stepSub && (
+                                              <div className="text-[8.5px] font-bold text-teal-800 leading-tight mt-0.5">
+                                                {r.stepSub}
+                                              </div>
+                                            )}
+                                          </td>
+                                          <td
+                                            className={`py-1 px-1.5 border-r border-slate-100 align-middle ${
+                                              r.hTick === "pass"
+                                                ? "bg-emerald-50/55"
+                                                : r.hTick === "trap"
+                                                  ? "bg-rose-50/55"
+                                                  : ""
+                                            }`}
+                                          >
+                                            {renderTempCell(r.hText, r.hSub, r.hTick)}
+                                          </td>
+                                          <td
+                                            className={`py-1 px-1.5 border-r border-slate-100 align-middle ${
+                                              r.aTick === "pass"
+                                                ? "bg-emerald-50/55"
+                                                : r.aTick === "trap"
+                                                  ? "bg-rose-50/55"
+                                                  : ""
+                                            }`}
+                                          >
+                                            {renderTempCell(r.aText, r.aSub, r.aTick)}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              )}
+                            </div>
+
+                            {/* ============================================================ */}
                             {/* BOX 2: Collapsible Dropdown — Final Verdict & Mode 14 Boxes  */}
                             {/* ============================================================ */}
                             <div
@@ -7662,10 +8158,14 @@ export default function NbaDashboardTab({
                                         : isQualified
                                           ? "bg-emerald-600 text-white border-emerald-700"
                                           : nhlNoBetTrapFlipped
-                                            ? "bg-indigo-600 text-white border-indigo-700"
-                                            : isSafetyHold
-                                              ? "bg-rose-600 text-white border-rose-700"
-                                              : "bg-slate-200 text-slate-700 border-slate-300"
+                                            ? isTmTrap
+                                              ? "bg-purple-700 text-white border-purple-800"
+                                              : "bg-indigo-600 text-white border-indigo-700"
+                                            : isHeatLock80
+                                              ? "bg-amber-100 text-amber-950 border-amber-400"
+                                              : isSafetyHold
+                                                ? "bg-rose-600 text-white border-rose-700"
+                                                : "bg-slate-200 text-slate-700 border-slate-300"
                                     }`}
                                   >
                                     {isQualified && isVip3
@@ -7675,10 +8175,14 @@ export default function NbaDashboardTab({
                                         : nhlNoBetTrapFlipped
                                           ? isEcTrap
                                             ? `🔄 چرخش تله ${nbTrapCode} (EARTH+Pyth)`
-                                            : `🔄 چرخش تله ${nbTrapCode || nhlIceMeta?.m16_flip_code?.split("_").pop() || "باکس ۱"}`
-                                          : isSafetyHold
-                                            ? "⛔ مهار قفل ایمنی"
-                                            : "خارج از سیگنال"}
+                                            : isTmTrap
+                                              ? `🔄 چرخش مزاج ${nbTrapCode} (ΣΔ8)`
+                                              : `🔄 چرخش تله ${nbTrapCode || nhlIceMeta?.m16_flip_code?.split("_").pop() || "باکس ۱"}`
+                                          : isHeatLock80
+                                            ? "🔥 تایید قفل گرمی"
+                                            : isSafetyHold
+                                              ? "⛔ مهار قفل ایمنی"
+                                              : "خارج از سیگنال"}
                                   </span>
                                   <span className="px-1.5 py-0.5 rounded bg-white border border-slate-300 text-slate-800 font-extrabold text-[9px]">
                                     {isBox2Open ? "بستن ▲" : "باز کردن ▼"}
@@ -7713,7 +8217,9 @@ export default function NbaDashboardTab({
                                       isQualified
                                         ? "bg-emerald-100/80 border-emerald-400 text-emerald-950"
                                         : nhlNoBetTrapFlipped
-                                          ? "bg-indigo-50/90 border-indigo-300 text-indigo-950"
+                                          ? isTmTrap
+                                            ? "bg-purple-50/90 border-purple-300 text-purple-950"
+                                            : "bg-indigo-50/90 border-indigo-300 text-indigo-950"
                                           : "bg-sky-50/80 border-sky-200 text-slate-800"
                                     }`}
                                   >
@@ -7725,10 +8231,14 @@ export default function NbaDashboardTab({
                                         : nhlNoBetTrapFlipped
                                           ? isEcTrap
                                             ? `🔄 چرخش تله ${nbTrapCode} (مجموع EARTH+Pyth% کوچک‌تر • ردِ ${getTeam3Code(nhlIceMeta?.nobet_orig_fav || "")} • بدون بت):`
-                                            : `🔄 مسیر ضدتله باکس ۱ (${nbTrapCode || nhlIceMeta?.m16_flip_code?.split("_").pop() || "TRAP"} • ردِ ${getTeam3Code(nhlIceMeta?.nobet_orig_fav || nhlIceMeta?.m16_orig_pick || "")} • بدون بت):`
+                                            : isTmTrap
+                                              ? `🔄 چرخش مزاج و طبایع ${nbTrapCode} (انطباق ΣΔ8 • ردِ ${getTeam3Code(nhlIceMeta?.nobet_orig_fav || "")} • بدون بت):`
+                                              : `🔄 مسیر ضدتله باکس ۱ (${nbTrapCode || nhlIceMeta?.m16_flip_code?.split("_").pop() || "TRAP"} • ردِ ${getTeam3Code(nhlIceMeta?.nobet_orig_fav || nhlIceMeta?.m16_orig_pick || "")} • بدون بت):`
                                           : isTotalElem12Mode && sm14.kind === "M14_VETO_TRAP"
                                             ? `مسیر جایگزین ضدتله (ردِ ${getTeam3Code(sm14.baseM14Pick)} • بدون بت):`
-                                            : "مسیر پیشنهادی (بدون بت):"}
+                                            : isHeatLock80
+                                              ? "🔥 مسیر پیشنهادی + تایید قفل گرمی مزاج (بدون بت):"
+                                              : "مسیر پیشنهادی (بدون بت):"}
                                     </span>
                                     <span className="inline-flex items-center gap-1.5 font-extrabold text-xs">
                                       <bdi dir="ltr">{predTeam}</bdi>

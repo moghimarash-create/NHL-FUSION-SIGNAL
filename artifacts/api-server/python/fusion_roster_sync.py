@@ -1306,6 +1306,66 @@ def recompute_all_fusion_modes(g):
             f"+ برتری بردار +Tm ({dp9_sml_ec:+.1f}v{dp9_big_ec:+.1f}) + سیگنال همزاد به سود {sml_ec}"
         )
 
+    # 4 Temperament Sub-Patterns (TM1 U TM2(<0) U TM3 U TM4) strictly on Untouched !M16 Cards:
+    ORD_21_TEMP = {"FIRE": 2.0, "AIR": 1.0, "TIE": 0.0, "EARTH": -1.0, "WATER": -2.0}
+    sd8_ice = round(h_d_pwr8 + a_d_pwr8, 1)
+    both_d8_pos_ice = (h_d_pwr8 > 0.0 and a_d_pwr8 > 0.0)
+    both_d8_neg_ice = (h_d_pwr8 < 0.0 and a_d_pwr8 < 0.0)
+    h_tot_ef = max(1.0, float(sum(h_ef_v4))) if len(h_ef_v4) == 4 else 1.0
+    a_tot_ef = max(1.0, float(sum(a_ef_v4))) if len(a_ef_v4) == 4 else 1.0
+    h_warm_sh = (float(h_ef_v4[0] + h_ef_v4[1]) / h_tot_ef) if len(h_ef_v4) == 4 else 0.0
+    a_warm_sh = (float(a_ef_v4[0] + a_ef_v4[1]) / a_tot_ef) if len(a_ef_v4) == 4 else 0.0
+    h_wet_sh = (float(h_ef_v4[1] + h_ef_v4[2]) / h_tot_ef) if len(h_ef_v4) == 4 else 0.0
+    a_wet_sh = (float(a_ef_v4[1] + a_ef_v4[2]) / a_tot_ef) if len(a_ef_v4) == 4 else 0.0
+    h_warm_pct = round(100.0 * h_warm_sh, 1)
+    a_warm_pct = round(100.0 * a_warm_sh, 1)
+    h_wet_pct = round(100.0 * h_wet_sh, 1)
+    a_wet_pct = round(100.0 * a_wet_sh, 1)
+    h_s12 = round(ORD_21_TEMP.get(h_dom13, 0.0) + 2.0 * ORD_21_TEMP.get(hel_ice, 0.0), 1)
+    a_s12 = round(ORD_21_TEMP.get(a_dom13, 0.0) + 2.0 * ORD_21_TEMP.get(ael_ice, 0.0), 1)
+
+    r6_f_tm, r6_d_tm = _fd_ice(h_dom13, a_dom13)
+    r7_f_tm, r7_d_tm = _fd_ice(hel_ice, ael_ice)
+    s12_f_tm, s12_d_tm = _fd_ice(h_s12, a_s12)
+    ws_f_tm, ws_d_tm = _fd_ice(h_warm_sh, a_warm_sh)
+    wet_f_tm, wet_d_tm = _fd_ice(h_wet_sh, a_wet_sh)
+    wpct_f_tm, wpct_d_tm = _fd_ice(h_warm_pct, a_warm_pct)
+    wtpct_f_tm, wtpct_d_tm = _fd_ice(h_wet_pct, a_wet_pct)
+
+    heat_lock_80 = bool(
+        both_d8_pos_ice
+        and (sd8_ice >= 80.0)
+        and (((s12_f_tm - s12_d_tm) >= 4.0) or (r7_f_tm in ("FIRE", "AIR") and r7_d_tm in ("EARTH", "WATER")))
+    )
+
+    tm_code = ""
+    tm_desc_fa = ""
+    if (not ec_code) and (not nobet_trap_code):
+        if both_d8_neg_ice and (sd8_ice <= -40.0) and (r7_f_tm == "AIR") and (r7_d_tm in ("WATER", "EARTH")) and (dg8_d > dg8_f):
+            tm_code = "TM1"
+            tm_desc_fa = (
+                f"تله مزاجی TM1 (رژیم دو-منفی عمیق ΣΔ8={sd8_ice:+.1f}≤−40): طبع سرد/تر {r7_d_tm} روی {dog_ice} "
+                f"برابر سپر گرم {r7_f_tm} + برتری ΔGF ({dg8_d:+.1f}v{dg8_f:+.1f})"
+            )
+        elif (sd8_ice < 0.0) and (p_fav_ice < 58.0) and (r7_f_tm == "AIR") and (r7_d_tm == "WATER") and (dp8_d > dp8_f):
+            tm_code = "TM2"
+            tm_desc_fa = (
+                f"تله مزاجی TM2 (رژیم سرد ΣΔ8={sd8_ice:+.1f}<0 • Pyth {p_fav_ice:.1f}%): طبع سرد و تر WATER روی {dog_ice} "
+                f"برابر AIR + برتری Δ8 ({dp8_d:+.1f}v{dp8_f:+.1f})"
+            )
+        elif (sd8_ice < 0.0) and (p_fav_ice < 58.0) and (wet_d_tm > wet_f_tm) and (s12_d_tm < s12_f_tm) and (c_pwr_d < c_pwr_f):
+            tm_code = "TM3"
+            tm_desc_fa = (
+                f"تله مزاجی TM3 (رژیم سرد ΣΔ8={sd8_ice:+.1f}<0 • Pyth {p_fav_ice:.1f}%): تری بالاتر بردار ({wtpct_d_tm:.1f}%v{wtpct_f_tm:.1f}%) "
+                f"+ طبع سردتر (s12 {s12_d_tm:+.0f}v{s12_f_tm:+.0f}) + قطب سرد ۰xxx قوی‌تر ({c_pwr_d:+.1f}v{c_pwr_f:+.1f})"
+            )
+        elif (sd8_ice >= 15.0) and (r6_f_tm == "WATER") and (r6_d_tm != "WATER") and (ws_d_tm > ws_f_tm) and ((dp8_d - dp8_f) >= 10.0):
+            tm_code = "TM4"
+            tm_desc_fa = (
+                f"تله مزاجی TM4 (گرمای کاذب در ΣΔ8={sd8_ice:+.1f}≥+15): هسته سرد WATER سطر ۶ روی {fav_ice} "
+                f"برابر بردار گرم‌تر {dog_ice} ({wpct_d_tm:.1f}%v{wpct_f_tm:.1f}%) + شکاف Δ8 ({dp8_d:+.1f}v{dp8_f:+.1f})"
+            )
+
     if ec_code:
         nobet_trap_code = ec_code
         nobet_trap_desc_fa = ec_desc_fa
@@ -1313,6 +1373,13 @@ def recompute_all_fusion_modes(g):
         nobet_route_pick = sml_ec
         nobet_orig_rejected = big_ec
         nobet_route_fa = f"🔄 چرخش مسیر بدون بت به {sml_ec} (ردِ {big_ec} • {ec_desc_fa})"
+    elif tm_code:
+        nobet_trap_code = tm_code
+        nobet_trap_desc_fa = tm_desc_fa
+        nobet_trap_hit = True
+        nobet_route_pick = dog_ice
+        nobet_orig_rejected = fav_ice
+        nobet_route_fa = f"🔄 چرخش مسیر بدون بت به {dog_ice} (ردِ {fav_ice} {p_fav_ice:.1f}% • {tm_desc_fa})"
     else:
         nobet_trap_hit = bool(nobet_trap_code)
         nobet_route_pick = dog_ice if nobet_trap_hit else fav_ice
@@ -1320,7 +1387,11 @@ def recompute_all_fusion_modes(g):
         nobet_route_fa = (
             f"🔄 چرخش مسیر بدون بت به {dog_ice} (ردِ {fav_ice} {p_fav_ice:.1f}% • {nobet_trap_desc_fa})"
             if nobet_trap_hit
-            else f"مسیر پایه کفه یخ هاکی (Pyth {p_fav_ice:.1f}% • بدون تله باکس ۱): {fav_ice}"
+            else (
+                f"مسیر پایه کفه یخ هاکی + 🔥 تایید مستقیم قفل گرمی مزاج (ΣΔ8={sd8_ice:+.1f}≥+80 • طبع گرم {r7_f_tm} برابر {r7_d_tm} • Pyth {p_fav_ice:.1f}%): {fav_ice}"
+                if heat_lock_80
+                else f"مسیر پایه کفه یخ هاکی (Pyth {p_fav_ice:.1f}% • بدون تله باکس ۱): {fav_ice}"
+            )
         )
 
     m15_sig = False
@@ -1635,6 +1706,14 @@ def recompute_all_fusion_modes(g):
         "nobet_reason_fa": nobet_route_fa if (not m16_sig) else "",
         "combo_h": combo_h_ec,
         "combo_a": combo_a_ec,
+        "sum_d8": sd8_ice,
+        "h_s12": h_s12,
+        "a_s12": a_s12,
+        "h_warm_pct": h_warm_pct,
+        "a_warm_pct": a_warm_pct,
+        "h_wet_pct": h_wet_pct,
+        "a_wet_pct": a_wet_pct,
+        "heat_lock_80": bool(heat_lock_80 and (not eff_nobet_flipped)),
     }
 
     in_ov_flag = bool(fm.get("in_auth_overlap", True))

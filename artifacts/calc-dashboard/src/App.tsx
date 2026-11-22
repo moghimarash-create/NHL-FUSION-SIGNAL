@@ -45,7 +45,7 @@ type ModeBenchInfo = {
 const DEFAULT_FUSION_MODES: Record<FusionModeKey, ModeBenchInfo> = {
   nhl_ice_ultralock: {
     shortFa: "حالت ۱۵ (ابرقفل اختصاصی هاکی NHL • DEG1=88 + سپر FIRE/AIR + ۱ گلر و ۷ اسکیت‌باز + چرخش دوقطبی Flip Guard): پیش‌فرض",
-    formulaEn: "NHL_Ice_UltraLock(DEG1=88, 1G+7S_TOI, Pyth_2.05) + FlipGuard[!Diamond & (PosPole_1G7S ∪ Twin50_F30 ∪ TR8_Bipolar ∪ TR9_ColdDGF)] + !M16_Route(TR∪EC)",
+    formulaEn: "NHL_Ice_UltraLock(DEG1=88, 1G+7S_TOI, Pyth_2.05) + FlipGuard[!Diamond & (PosPole_1G7S ∪ Twin50_F30 ∪ TR8_Bipolar ∪ TR9_ColdDGF)] + !M16_Route(TR∪EC∪TM)",
     holdPct: "69.3%",
     holdRec: "52/75",
     s2526: "67.7% (42/62)",
@@ -55,7 +55,7 @@ const DEFAULT_FUSION_MODES: Record<FusionModeKey, ModeBenchInfo> = {
   },
   nhl_anti_nobet: {
     shortFa: "حالت ۱۶ (ضد NO-BET هوشمند هاکی NHL: حالت ۱۵ + اتحاد یانگ و شکار تله سرد + گارد دوقطبی TR8∪TR9)",
-    formulaEn: "Mode_15_Core ∪ [(YangUnion_Release ∪ Contender_YinMismatch) + FlipGuard(TR8 ∪ TR9)] + !M16_Route(TR1..13 ∪ EC1..4 -> 60.9% All 3,150)",
+    formulaEn: "Mode_15_Core ∪ [(YangUnion_Release ∪ Contender_YinMismatch) + FlipGuard(TR8 ∪ TR9)] + !M16_Route(TR1..13 ∪ EC1..4 ∪ TM1..4 -> 62.1% All 3,150)",
     holdPct: "64.0%",
     holdRec: "87/136",
     s2526: "60.4% (61/101)",
@@ -445,10 +445,10 @@ function Home() {
 
               <div className="rounded-lg border border-cyan-300 bg-cyan-50/80 p-2.5 text-xs text-slate-800 leading-relaxed">
                 <div className="font-extrabold text-cyan-950 mb-1">
-                  کالیبراسیون اختصاصی هاکی روی یخ در حالت ۱۵ و ۱۶ + گارد چرخش دوقطبی (TR8∪TR9) و مسیریاب ضدتله باکس ۱ و دو-EARTH (DEG1=88 • Zero-Lookahead):
+                  کالیبراسیون اختصاصی هاکی روی یخ در حالت ۱۵ و ۱۶ + گارد دوقطبی (TR8∪TR9) و مسیریاب ضدتله باکس ۱، دو-EARTH و مزاج عناصر (DEG1=88 • Zero-Lookahead):
                 </div>
                 <div>
-                  ۱) <b>ترکیب خالص بازیکنان هاکی (۱ گلر اصلی + ۷ اسکیت‌باز برتر TOI)</b> با نمایش کامل <b>قطب گرم Σ(1xxx)</b>، <b>قطب سرد Σ(0xxx)</b> و <b>اختلاف قطبین Δ(1xxx − 0xxx)</b> (همراه بردار <b>+Tm</b>) در باکس ۱ حالت‌های ۱۵ و ۱۶ • ۲) <b>لایه چرخش هوشمند سیگنال‌های حالت ۱۵ و ۱۶ (Flip Guard بدون حذف هیچ بازی)</b>: مهار تله دو-مثبت (+,+) ۱G+7S، بن‌بست همزاد ۵۰٪ مرزی و <b>گارد دوقطبی خالص TR8 ∪ TR9</b> ⬅ ارتقای حالت ۱۵ به <b>۷۹.۵٪ کل (۱۱۶/۱۴۶ • ۲۰۲۴–۲۵: ۹۰.۱٪ • برون‌نمونه: ۶۹.۳٪)</b> و حالت ۱۶ به <b>۶۹.۸٪ کل (۱۸۳/۲۶۲)</b> • ۳) <b>مسیریاب ضدحذف بازی‌های خارج از سیگنال (!M16 = ۲٬۸۸۸ بازی)</b>: ترکیب ۸ تله قطبی باکس ۱ (<b>TR1..TR13</b>) + ۴ زیرقانون سه‌فصله دو-EARTH (<b>EC1∪EC2∪EC3∪EC4: مجموع EARTH + Pyth% کوچک‌تر</b>) ⬅ عبور کل <b>۳٬۱۵۰ بازی مسیریابی‌شده</b> کارت ۶ از مرز ۶۰٪ و رسیدن به <b>۶۰.۸۹٪ (۱٬۹۱۸/۳٬۱۵۰ • +۱۵۵ برد خالص)</b> با حفظ ۱۰۰٪ دست‌نخورده حالت‌های ۱ تا ۱۴.
+                  ۱) <b>ترکیب خالص بازیکنان هاکی (۱ گلر اصلی + ۷ اسکیت‌باز برتر TOI)</b> با نمایش کامل <b>قطب گرم Σ(1xxx)</b>، <b>قطب سرد Σ(0xxx)</b>، <b>اختلاف قطبین Δ(1xxx − 0xxx)</b> و <b>باکس مزاج و طبع (ΣΔ8)</b> در کارت بازی • ۲) <b>لایه چرخش هوشمند سیگنال‌های حالت ۱۵ و ۱۶ (Flip Guard بدون حذف هیچ بازی)</b>: مهار تله دو-مثبت (+,+) ۱G+7S، بن‌بست همزاد ۵۰٪ مرزی و <b>گارد دوقطبی خالص TR8 ∪ TR9</b> ⬅ ارتقای حالت ۱۵ به <b>۷۹.۵٪ کل (۱۱۶/۱۴۶ • ۲۰۲۴–۲۵: ۹۰.۱٪ • برون‌نمونه: ۶۹.۳٪)</b> و حالت ۱۶ به <b>۶۹.۸٪ کل (۱۸۳/۲۶۲)</b> • ۳) <b>مسیریاب ضدحذف بازی‌های خارج از سیگنال (!M16 = ۲٬۸۸۸ بازی)</b>: ترکیب ۸ تله قطبی باکس ۱ (<b>TR1..TR13</b>) + ۴ زیرقانون دو-EARTH (<b>EC1..EC4</b>) + ۴ زیرپترن مزاج و طبایع عناصر (<b>TM1∪TM2∪TM3∪TM4</b> بر اساس ΣΔ8 و طبع سطر ۶+۷) ⬅ ارتقای کل <b>۳٬۱۵۰ بازی مسیریابی‌شده</b> کارت ۶ به <b>۶۲.۱۰٪ (۱٬۹۵۶/۳٬۱۵۰ • +۱۹۳ برد خالص)</b> با حفظ ۱۰۰٪ دست‌نخورده حالت‌های ۱ تا ۱۴.
                 </div>
               </div>
 
