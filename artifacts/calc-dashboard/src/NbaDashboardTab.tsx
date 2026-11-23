@@ -1935,6 +1935,231 @@ function evalSmartAntiNoBet(g: NbaGamePred) {
   };
 }
 
+function evalNhlReferee3Boxes(g: NbaGamePred) {
+  const h = g.h;
+  const a = g.a;
+  const fm = g.fusion_meta;
+  const tm = fm?.team;
+  const pm = fm?.player;
+  const g1 = fm?.geo1xxx;
+  const t12 = fm?.total_elem_12;
+  const ice = fm?.nhl_ice;
+  const m15 = fm?.modes?.nhl_ice_ultralock;
+  const m16 = fm?.modes?.nhl_anti_nobet;
+
+  // 1) Box 1 (7 rows in NHL Ice Family)
+  let b1H = 0;
+  let b1A = 0;
+  if (tm?.sig && tm.pick === h) b1H += 1;
+  if (tm?.sig && tm.pick === a) b1A += 1;
+  if (pm?.sig && pm.pick === h) b1H += 1;
+  if (pm?.sig && pm.pick === a) b1A += 1;
+
+  const hSum = Number(g1?.h_sum ?? 0);
+  const aSum = Number(g1?.a_sum ?? 0);
+  const hCnt = Number(g1?.h_cnt ?? 0);
+  const aCnt = Number(g1?.a_cnt ?? 0);
+  const warm8Win = hSum < aSum ? h : aSum < hSum ? a : "";
+  if (hCnt !== 0 && warm8Win === h) b1H += 1;
+  if (aCnt !== 0 && warm8Win === a) b1A += 1;
+
+  const h0 = Number(g1?.h_0xxx ?? 0);
+  const a0 = Number(g1?.a_0xxx ?? 0);
+  const cold0Win =
+    g1?.cold0_win !== undefined ? g1.cold0_win : h0 < a0 ? h : a0 < h0 ? a : "";
+  if (cold0Win === h) b1H += 1;
+  if (cold0Win === a) b1A += 1;
+
+  const hD8 =
+    typeof ice?.h_d_pwr8 === "number"
+      ? ice.h_d_pwr8
+      : Math.round((hSum - h0) * 10) / 10;
+  const aD8 =
+    typeof ice?.a_d_pwr8 === "number"
+      ? ice.a_d_pwr8
+      : Math.round((aSum - a0) * 10) / 10;
+  if (hD8 < aD8) b1H += 1;
+  else if (aD8 < hD8) b1A += 1;
+
+  const hDomInfo = calcDominantElemVec(t12?.h_ef_tot);
+  const aDomInfo = calcDominantElemVec(t12?.a_ef_tot);
+  const hLead = [0, 1, 2, 3].filter((i) => hDomInfo.vec[i] > aDomInfo.vec[i]).length;
+  const aLead = [0, 1, 2, 3].filter((i) => aDomInfo.vec[i] > hDomInfo.vec[i]).length;
+  const dualWater = hDomInfo.dom === "WATER" && aDomInfo.dom === "WATER";
+  const domSplit = !hDomInfo.isTie && !aDomInfo.isTie && hDomInfo.dom !== aDomInfo.dom;
+  if (!dualWater) {
+    if (hLead === 3 || (domSplit && (hDomInfo.dom === "WATER" || hDomInfo.dom === "AIR"))) b1H += 1;
+    if (aLead === 3 || (domSplit && (aDomInfo.dom === "WATER" || aDomInfo.dom === "AIR"))) b1A += 1;
+  }
+
+  const hIceEl = String(ice?.hel_ice || g.ice_wtp?.hel_ice || "AIR");
+  const aIceEl = String(ice?.ael_ice || g.ice_wtp?.ael_ice || "AIR");
+  const hPh = Number((ice?.ph_ice ?? g.ice_wtp?.ph_ice ?? 50).toFixed(1));
+  const aPh = Number((100 - hPh).toFixed(1));
+  if ((hIceEl === "FIRE" || hIceEl === "AIR") && hPh >= 58.0) b1H += 1;
+  if ((aIceEl === "FIRE" || aIceEl === "AIR") && aPh >= 60.0) b1A += 1;
+
+  const wB1 = b1H > b1A ? h : b1A > b1H ? a : "TIE";
+  const diffB1 = Math.abs(b1H - b1A);
+
+  // 2) Box Temperament (5 rows in tempChecklistRows)
+  let btH = 0;
+  let btA = 0;
+  const ord21: Record<string, number> = { FIRE: 2, AIR: 1, TIE: 0, EARTH: -1, WATER: -2 };
+  const sumD8 =
+    typeof ice?.sum_d8 === "number"
+      ? ice.sum_d8
+      : Math.round((hD8 + aD8) * 10) / 10;
+  const hDomR6 = String(ice?.h_dom || hDomInfo.dom || "EARTH");
+  const aDomR6 = String(ice?.a_dom || aDomInfo.dom || "EARTH");
+  const hS12 =
+    typeof ice?.h_s12 === "number"
+      ? ice.h_s12
+      : (ord21[hDomR6] ?? 0) + 2 * (ord21[hIceEl] ?? 0);
+  const aS12 =
+    typeof ice?.a_s12 === "number"
+      ? ice.a_s12
+      : (ord21[aDomR6] ?? 0) + 2 * (ord21[aIceEl] ?? 0);
+
+  const hEf = t12?.h_ef_tot && t12.h_ef_tot.length === 4 ? t12.h_ef_tot : [0, 0, 0, 0];
+  const aEf = t12?.a_ef_tot && t12.a_ef_tot.length === 4 ? t12.a_ef_tot : [0, 0, 0, 0];
+  const hEfSum = Math.max(1, hEf[0] + hEf[1] + hEf[2] + hEf[3]);
+  const aEfSum = Math.max(1, aEf[0] + aEf[1] + aEf[2] + aEf[3]);
+  const hWarmPct =
+    typeof ice?.h_warm_pct === "number"
+      ? ice.h_warm_pct
+      : Math.round((1000 * (hEf[0] + hEf[1])) / hEfSum) / 10;
+  const aWarmPct =
+    typeof ice?.a_warm_pct === "number"
+      ? ice.a_warm_pct
+      : Math.round((1000 * (aEf[0] + aEf[1])) / aEfSum) / 10;
+  const hWetPct =
+    typeof ice?.h_wet_pct === "number"
+      ? ice.h_wet_pct
+      : Math.round((1000 * (hEf[1] + hEf[2])) / hEfSum) / 10;
+  const aWetPct =
+    typeof ice?.a_wet_pct === "number"
+      ? ice.a_wet_pct
+      : Math.round((1000 * (aEf[1] + aEf[2])) / aEfSum) / 10;
+  const hCombo =
+    typeof ice?.combo_h === "number"
+      ? ice.combo_h
+      : Math.round((Math.max(...hEf, 0) + hPh) * 10) / 10;
+  const aCombo =
+    typeof ice?.combo_a === "number"
+      ? ice.combo_a
+      : Math.round((Math.max(...aEf, 0) + aPh) * 10) / 10;
+  const nbCode = String(ice?.nobet_trap_code || "");
+  const isEc = nbCode.startsWith("EC");
+  const isTm = nbCode.startsWith("TM");
+  const isHl80 = Boolean(ice?.heat_lock_80);
+  const dualEarthReg =
+    (hDomR6 === "EARTH" && aDomR6 === "EARTH") || (hIceEl === "EARTH" && aIceEl === "EARTH");
+
+  if (sumD8 > 0) {
+    if (hD8 > aD8) btH += 1;
+    else if (aD8 > hD8) btA += 1;
+    if (hS12 > aS12) btH += 1;
+    else if (aS12 > hS12) btA += 1;
+    if (hWarmPct > aWarmPct) btH += 1;
+    else if (aWarmPct > hWarmPct) btA += 1;
+  } else if (sumD8 < 0) {
+    if (hD8 < aD8) btH += 1;
+    else if (aD8 < hD8) btA += 1;
+    if (hS12 < aS12) btH += 1;
+    else if (aS12 < hS12) btA += 1;
+    if (hWetPct > aWetPct) btH += 1;
+    else if (aWetPct > hWetPct) btA += 1;
+  }
+
+  if ((dualEarthReg || isEc) && Math.abs(hCombo - aCombo) > 1e-9) {
+    if (hCombo < aCombo) btH += 1;
+    else btA += 1;
+  }
+
+  const origFav = String(ice?.nobet_orig_fav || "");
+  const selTm =
+    (isTm || isEc) && origFav ? (origFav === h ? a : h) : isHl80 ? (hPh >= 50 ? h : a) : "";
+  if (selTm === h) btH += 1;
+  else if (selTm === a) btA += 1;
+
+  const wBt = btH > btA ? h : btA > btH ? a : "TIE";
+  const diffBt = Math.abs(btH - btA);
+
+  // 3) Box 2 Verdict & Category (S1..S4)
+  const wB2 = m16?.pick || m15?.pick || g.sys_win || h;
+  const oppB2 = wB2 === h ? a : h;
+  const cat: "S1_M15" | "S2_M16_only" | "S3_Trap_Flip" | "S4_Raw_NoBet" = m15?.sig
+    ? "S1_M15"
+    : m16?.sig
+      ? "S2_M16_only"
+      : ice?.nobet_flipped
+        ? "S3_Trap_Flip"
+        : "S4_Raw_NoBet";
+
+  const relB1 = wB1 === wB2 ? "AGREE" : wB1 === "TIE" ? "TIE" : "OPP";
+  const relBt = wBt === wB2 ? "AGREE" : wBt === "TIE" ? "TIE" : "OPP";
+  const pFav = Math.max(hPh, aPh);
+  const totH = b1H + btH;
+  const totA = b1A + btA;
+  const totB2 = wB2 === h ? totH : totA;
+  const totOpp = wB2 === h ? totA : totH;
+
+  // SC1: Diamond 3-Box Referee (46/54 = 85.2% in 3 seasons, 6/6 = 100% in 2026-27)
+  const isSc1 = Boolean(
+    cat === "S1_M15" && (relBt === "AGREE" || (relB1 === "OPP" && relBt === "OPP"))
+  );
+  // SC12: Golden 3-Box Referee Union (182/245 = 74.3%, zero duplicate counting, superset of SC1)
+  const isSc12 = Boolean(
+    (cat === "S1_M15" && wBt !== "TIE") ||
+      (cat === "S3_Trap_Flip" && relBt === "AGREE" && relB1 === "OPP" && diffBt >= 2)
+  );
+
+  // Visual-Only Pyth<55% Borderline Tick-Rebellion Caution (RF1 U RF2 on S4_Raw_NoBet — zero pick change!)
+  const isRf1 = Boolean(
+    cat === "S4_Raw_NoBet" &&
+      pFav < 55.0 &&
+      relB1 === "OPP" &&
+      relBt === "OPP" &&
+      diffB1 + diffBt >= 4 &&
+      hD8 < 0 &&
+      aD8 < 0
+  );
+  const isRf2 = Boolean(
+    cat === "S4_Raw_NoBet" &&
+      pFav < 55.0 &&
+      relB1 === "OPP" &&
+      diffB1 >= 2 &&
+      relBt === "AGREE" &&
+      sumD8 >= 25.0
+  );
+  const rfWarnCode: "" | "RF1" | "RF2" = isRf1 ? "RF1" : isRf2 ? "RF2" : "";
+
+  return {
+    b1H,
+    b1A,
+    wB1,
+    diffB1,
+    btH,
+    btA,
+    wBt,
+    diffBt,
+    wB2,
+    oppB2,
+    cat,
+    relB1,
+    relBt,
+    pFav,
+    sumD8,
+    totB2,
+    totOpp,
+    isSc1,
+    isSc12,
+    hasPyth55Warn: Boolean(rfWarnCode),
+    rfWarnCode,
+  };
+}
+
 export default function NbaDashboardTab({
   fusionMode = "nhl_ice_ultralock",
   twinDbKind = "team",
@@ -2133,10 +2358,14 @@ export default function NbaDashboardTab({
   };
   const isNhlSignalOrTrapCard = (g: NbaGamePred) =>
     Boolean(activeF1WtpOf(g) || isNhlTrapFlippedCard(g));
+  const isNhlRef3Sc12Card = (g: NbaGamePred) => evalNhlReferee3Boxes(g).isSc12;
+  const isNhlRef3Sc1Card = (g: NbaGamePred) => evalNhlReferee3Boxes(g).isSc1;
   const [dailyCardFilter, setDailyCardFilter] = useState<
     | "all"
     | "qualified"
     | "signal_or_trap"
+    | "ref3_sc12"
+    | "ref3_sc1"
     | "anti_nobet"
     | "trap_flip"
     | "ec_flip"
@@ -2879,6 +3108,8 @@ export default function NbaDashboardTab({
                             | "all"
                             | "qualified"
                             | "signal_or_trap"
+                            | "ref3_sc12"
+                            | "ref3_sc1"
                             | "anti_nobet"
                             | "trap_flip"
                             | "ec_flip"
@@ -2901,6 +3132,12 @@ export default function NbaDashboardTab({
                       <option value="qualified">فقط سیگنال‌های تاییدشده موتور فعال ({gamesOnDailyDate.filter((x) => activeF1WtpOf(x)).length} بازی)</option>
                       <option value="signal_or_trap">
                         سیگنال‌های فعال + چرخش‌های ضدتله (TR/EC/TM) ({gamesOnDailyDate.filter((x) => isNhlSignalOrTrapCard(x)).length} بازی)
+                      </option>
+                      <option value="ref3_sc12">
+                        🏅 تایید طلایی داور ۳ باکس (SC12 • ۷۴.۳٪) ({gamesOnDailyDate.filter((x) => isNhlRef3Sc12Card(x)).length} بازی)
+                      </option>
+                      <option value="ref3_sc1">
+                        💎 فقط الماس داور ۳ باکس (SC1 • ۸۵.۲٪) ({gamesOnDailyDate.filter((x) => isNhlRef3Sc1Card(x)).length} بازی)
                       </option>
                       <option value="anti_nobet">
                         {fusionMode === "total_elem_12"
@@ -3195,6 +3432,22 @@ export default function NbaDashboardTab({
                 const sigOrTrapPct =
                   sigOrTrapDone.length > 0 ? Math.round((1000 * sigOrTrapWins) / sigOrTrapDone.length) / 10 : null;
 
+                const ref3Evals = gamesOnDailyDate.map((x) => {
+                  const r3 = evalNhlReferee3Boxes(x);
+                  const effPick = cardFlipDir[x.n] ? (r3.wB2 === x.h ? x.a : x.h) : r3.wB2;
+                  return { g: x, r3, effPick };
+                });
+                const ref3Sc12Cards = ref3Evals.filter((e) => e.r3.isSc12);
+                const ref3Sc12Done = ref3Sc12Cards.filter((e) => Boolean(e.g.done && e.g.aw && e.g.aw !== "PENDING"));
+                const ref3Sc12Wins = ref3Sc12Done.filter((e) => e.effPick === e.g.aw).length;
+                const ref3Sc12Losses = ref3Sc12Done.length - ref3Sc12Wins;
+                const ref3Sc12Pct =
+                  ref3Sc12Done.length > 0 ? Math.round((1000 * ref3Sc12Wins) / ref3Sc12Done.length) / 10 : null;
+                const ref3Sc1Cards = ref3Evals.filter((e) => e.r3.isSc1);
+                const ref3Sc1Done = ref3Sc1Cards.filter((e) => Boolean(e.g.done && e.g.aw && e.g.aw !== "PENDING"));
+                const ref3Sc1Wins = ref3Sc1Done.filter((e) => e.effPick === e.g.aw).length;
+                const ref3Sc1Losses = ref3Sc1Done.length - ref3Sc1Wins;
+
                 return (
                   <div
                     data-testid="bar-daily-winloss"
@@ -3246,6 +3499,21 @@ export default function NbaDashboardTab({
                           className="px-2 py-0.5 rounded bg-gradient-to-l from-emerald-50 via-teal-50 to-violet-50 text-teal-950 border border-teal-400 font-mono font-extrabold"
                         >
                           ⚡ سیگنال + چرخش تله: {sigOrTrapCards.length} بازی فعال
+                        </span>
+                      ) : null}
+                      {ref3Sc12Done.length > 0 ? (
+                        <span
+                          data-testid="badge-daily-ref3"
+                          className="px-2 py-0.5 rounded bg-gradient-to-l from-amber-100 via-yellow-50 to-cyan-100 text-slate-950 border border-amber-500 font-mono font-extrabold shadow-2xs"
+                        >
+                          🏅 داور ۳ باکس (SC12): {ref3Sc12Wins} برد - {ref3Sc12Losses} باخت ({ref3Sc12Pct}%) • 💎 الماس SC1: {ref3Sc1Wins}-{ref3Sc1Losses}
+                        </span>
+                      ) : ref3Sc12Cards.length > 0 ? (
+                        <span
+                          data-testid="badge-daily-ref3"
+                          className="px-2 py-0.5 rounded bg-amber-50 text-amber-950 border border-amber-400 font-mono font-extrabold"
+                        >
+                          🏅 داور ۳ باکس (SC12): {ref3Sc12Cards.length} بازی فعال • 💎 الماس SC1: {ref3Sc1Cards.length}
                         </span>
                       ) : null}
                       {fusionMode === "tri_gf_ultralock" && (
@@ -3379,6 +3647,30 @@ export default function NbaDashboardTab({
                         }`}
                       >
                         ⚡ سیگنال + چرخش ({sigOrTrapCards.length})
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="btn-filter-ref3-sc12"
+                        onClick={() => setDailyCardFilter((prev) => (prev === "ref3_sc12" ? "all" : "ref3_sc12"))}
+                        className={`px-2 py-0.5 rounded border font-extrabold transition-colors ${
+                          dailyCardFilter === "ref3_sc12"
+                            ? "bg-amber-600 text-white border-amber-700 shadow-2xs ring-1 ring-amber-300"
+                            : "bg-amber-100/90 text-amber-950 border-amber-400 hover:bg-amber-200/80"
+                        }`}
+                      >
+                        🏅 داور ۳ باکس ({ref3Sc12Cards.length})
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="btn-filter-ref3-sc1"
+                        onClick={() => setDailyCardFilter((prev) => (prev === "ref3_sc1" ? "all" : "ref3_sc1"))}
+                        className={`px-2 py-0.5 rounded border font-extrabold transition-colors ${
+                          dailyCardFilter === "ref3_sc1"
+                            ? "bg-cyan-700 text-white border-cyan-800 shadow-2xs ring-1 ring-cyan-300"
+                            : "bg-cyan-100/90 text-cyan-950 border-cyan-400 hover:bg-cyan-200/80"
+                        }`}
+                      >
+                        💎 الماس ۸۵٪ ({ref3Sc1Cards.length})
                       </button>
                       <button
                         type="button"
@@ -5180,6 +5472,8 @@ export default function NbaDashboardTab({
                     .filter((item) => {
                       if (dailyCardFilter === "qualified") return item.isQualified;
                       if (dailyCardFilter === "signal_or_trap") return Boolean(item.isQualified || isNhlTrapFlippedCard(item.g));
+                      if (dailyCardFilter === "ref3_sc12") return isNhlRef3Sc12Card(item.g);
+                      if (dailyCardFilter === "ref3_sc1") return isNhlRef3Sc1Card(item.g);
                       if (dailyCardFilter === "anti_nobet") return fusionMode === "total_elem_12" ? evalSmartMode14(item.g).sig : evalSmartAntiNoBet(item.g).sig;
                       if (dailyCardFilter === "trap_flip") return isNhlTrapFlippedCard(item.g);
                       if (dailyCardFilter === "ec_flip") return isNhlEcTrapCard(item.g);
@@ -6835,6 +7129,7 @@ export default function NbaDashboardTab({
                       ];
                       const tempHomeTicks = tempChecklistRows.filter((r) => r.hTick === "pass").length;
                       const tempAwayTicks = tempChecklistRows.filter((r) => r.aTick === "pass").length;
+                      const ref3 = evalNhlReferee3Boxes(g);
                       const m16TitleMap: Record<string, string> = {
                         M15_CORE: m15LockTitleMap[m15Code] || "سیگنال اصلی حالت ۱۵ هاکی تایید شد",
                         YANG_UNION_RELEASE: "گروه ۱ ضد NO-BET هاکی: آزادسازی اتحاد همزاد با سپر FIRE/AIR",
@@ -8011,6 +8306,28 @@ export default function NbaDashboardTab({
                                       {isTmTrap || isEcTrap ? `🔄 ${nbTrapCode}` : "✓ قفل گرمی"}
                                     </span>
                                   )}
+                                  {ref3.isSc1 ? (
+                                    <span
+                                      data-testid={`badge-temp-ref3-sc1-${g.n}`}
+                                      className="px-1.5 py-0.5 rounded border bg-cyan-700 text-white border-cyan-800 font-extrabold text-[9px] whitespace-nowrap shadow-2xs"
+                                    >
+                                      💎 الماس داور ۳ باکس (85%)
+                                    </span>
+                                  ) : ref3.isSc12 ? (
+                                    <span
+                                      data-testid={`badge-temp-ref3-sc12-${g.n}`}
+                                      className="px-1.5 py-0.5 rounded border bg-amber-500 text-slate-950 border-amber-600 font-extrabold text-[9px] whitespace-nowrap shadow-2xs"
+                                    >
+                                      🏅 تایید داور ۳ باکس (74%)
+                                    </span>
+                                  ) : ref3.hasPyth55Warn ? (
+                                    <span
+                                      data-testid={`badge-temp-ref3-warn-${g.n}`}
+                                      className="px-1.5 py-0.5 rounded border bg-amber-100 text-amber-950 border-amber-500 font-extrabold text-[9px] whitespace-nowrap"
+                                    >
+                                      ⚠️ هشدار شورش تیک (Pyth&lt;55%)
+                                    </span>
+                                  ) : null}
                                   <span
                                     dir="ltr"
                                     className="whitespace-nowrap font-mono font-extrabold text-[9.5px] px-1.5 py-0.5 rounded bg-white border border-teal-200 text-slate-800"
@@ -8143,7 +8460,29 @@ export default function NbaDashboardTab({
                                 <span className="font-extrabold text-slate-900">
                                   باکس ۲ • حکم نهایی، قفل و پیش‌بینی روز
                                 </span>
-                                <div className="inline-flex items-center gap-1 shrink-0">
+                                <div className="inline-flex flex-wrap items-center gap-1 shrink-0">
+                                  {ref3.isSc1 ? (
+                                    <span
+                                      data-testid={`badge-box2-ref3-sc1-${g.n}`}
+                                      className="px-1.5 py-0.5 rounded border bg-cyan-700 text-white border-cyan-800 font-extrabold text-[9px] whitespace-nowrap shadow-2xs"
+                                    >
+                                      💎 الماس داور ۳ باکس (85%)
+                                    </span>
+                                  ) : ref3.isSc12 ? (
+                                    <span
+                                      data-testid={`badge-box2-ref3-sc12-${g.n}`}
+                                      className="px-1.5 py-0.5 rounded border bg-amber-500 text-slate-950 border-amber-600 font-extrabold text-[9px] whitespace-nowrap shadow-2xs"
+                                    >
+                                      🏅 تایید داور ۳ باکس (74%)
+                                    </span>
+                                  ) : ref3.hasPyth55Warn ? (
+                                    <span
+                                      data-testid={`badge-box2-ref3-warn-${g.n}`}
+                                      className="px-1.5 py-0.5 rounded border bg-amber-100 text-amber-950 border-amber-500 font-extrabold text-[9px] whitespace-nowrap"
+                                    >
+                                      ⚠️ هشدار شورش تیک (Pyth&lt;55%)
+                                    </span>
+                                  ) : null}
                                   <span
                                     dir="ltr"
                                     className="font-mono font-extrabold text-[9.5px] px-1.5 py-0.5 rounded bg-white border border-slate-300 text-slate-900"
@@ -8209,6 +8548,27 @@ export default function NbaDashboardTab({
                                       </div>
                                     )}
                                   </div>
+
+                                  {(ref3.isSc1 || ref3.isSc12 || ref3.hasPyth55Warn) && (
+                                    <div
+                                      data-testid={`text-ref3-note-${g.n}`}
+                                      className={`rounded-md px-2.5 py-1.5 border text-[9.5px] font-extrabold leading-snug ${
+                                        ref3.isSc1
+                                          ? "bg-cyan-50/90 border-cyan-400 text-cyan-950"
+                                          : ref3.isSc12
+                                            ? "bg-amber-50/90 border-amber-400 text-amber-950"
+                                            : "bg-amber-100/90 border-amber-500 text-amber-950"
+                                      }`}
+                                    >
+                                      {ref3.isSc1
+                                        ? `💎 الماس داور ۳ باکس (SC1 • دقت ۸۵.۲٪ سه‌فصله): هم‌راستایی سیگنال حالت ۱۵ با ماتریس مزاج/گارد دوقطبی به سود ${getTeam3Code(ref3.wB2)}`
+                                        : ref3.isSc12
+                                          ? ref3.cat === "S1_M15"
+                                            ? `🏅 تایید طلایی داور ۳ باکس (SC12 • ۸۱.۷٪): سیگنال حالت ۱۵ همراه با رای غیرمساوی باکس مزاج (${ref3.btH}✓-${ref3.btA}✓)`
+                                            : `🏅 تایید طلایی داور ۳ باکس (SC12 • ۷۴.۳٪): باکس مزاج با اختلاف +${ref3.diffBt} تیک چرخش ضدتله ${nbTrapCode} به سود ${getTeam3Code(ref3.wB2)} را برابر باکس ۱ تایید کرد`
+                                          : `⚠️ هشدار مرز Pyth<55%: شورش تیک به سود ${getTeam3Code(ref3.oppB2)} (${ref3.totOpp}✓ برابر ${ref3.totB2}✓ • الگوی ${ref3.rfWarnCode} در Pyth=${ref3.pFav.toFixed(1)}% — فقط هشدار چشمی بدون تغییر تیم منتخب)`}
+                                    </div>
+                                  )}
 
                                   {/* Final Prediction Row */}
                                   <div
